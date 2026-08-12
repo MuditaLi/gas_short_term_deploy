@@ -11,3 +11,7 @@ $da = Read-Host 'DA  09:00-09:30 price (EUR/MWh)'
 $m1 = Read-Host 'M1  09:00-09:30 price (EUR/MWh)'
 
 python "$github\quant_strats\DA_M1\3-spread_forecast.py" --da $da --m1 $m1
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# push fresh data + signal to GitHub for the hosted dashboard
+& (Join-Path $PSScriptRoot 'publish_data.ps1')
