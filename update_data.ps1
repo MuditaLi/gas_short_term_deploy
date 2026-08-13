@@ -13,13 +13,13 @@ $logDir = Join-Path $PSScriptRoot 'logs'
 New-Item -ItemType Directory -Force $logDir | Out-Null
 $log = Join-Path $logDir ('update_{0:yyyyMMdd_HHmm}.log' -f (Get-Date))
 
-function Run-Step($name, $script) {
+function Run-Step($name, $script, $py = 'python') {
     $stamp = Get-Date -Format 'HH:mm:ss'
     Add-Content $log "`n=== [$stamp] $name ==="
     Write-Host "=== $name ==="
     $out = [System.IO.Path]::GetTempFileName()
     $err = [System.IO.Path]::GetTempFileName()
-    $p = Start-Process -FilePath 'python' -ArgumentList "`"$script`"" `
+    $p = Start-Process -FilePath $py -ArgumentList "`"$script`"" `
          -Wait -PassThru -NoNewWindow `
          -RedirectStandardOutput $out -RedirectStandardError $err
     Get-Content $out, $err | Add-Content $log
@@ -34,7 +34,11 @@ function Run-Step($name, $script) {
 }
 
 $ok1 = Run-Step 'S&D pipeline (daily_storage_forecast)' "$github\daily_storage_forecast\main.py"
-$ok2 = Run-Step 'DA_M1 flow forecast'                   "$github\quant_strats\DA_M1\2-storage_flow_forecast.py"
+
+# DA_M1 scripts run in their own venv when present (unambiguous deps)
+$dam1py = Join-Path $github 'quant_strats\DA_M1\.venv\Scripts\python.exe'
+if (-not (Test-Path $dam1py)) { $dam1py = 'python' }
+$ok2 = Run-Step 'DA_M1 flow forecast'                   "$github\quant_strats\DA_M1\2-storage_flow_forecast.py" $dam1py
 
 Add-Content $log ("`n=== done {0:yyyy-MM-dd HH:mm} | snd={1} flow={2} ===" -f (Get-Date), $ok1, $ok2)
 Write-Host "log -> $log"
