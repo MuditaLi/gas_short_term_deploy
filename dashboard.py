@@ -146,9 +146,10 @@ try:
     s2.caption('Prediction')
     s2.markdown(f"### <span style='color:{color}'>{tri}</span> {direction}",
                 unsafe_allow_html=True)
-    s3.metric('Confidence', f"{sig['confidence']:.2f}",
-              delta='TRADE' if sig['ref_trade'] else 'below gate (0.10) - no trade',
-              delta_color='normal' if sig['ref_trade'] else 'off')
+    s3.metric('Confidence', f"{sig['confidence'] * 200:.0f}%",
+              delta='TRADE' if sig['ref_trade'] else 'below gate (20%) - no trade',
+              delta_color='normal' if sig['ref_trade'] else 'off',
+              help='share of maximum conviction: 0% = coin flip, 100% = certain; trade gate at 20%')
     if sig['date'].date() != datetime.today().date():
         st.warning(f"signal is for {sig['date']:%Y-%m-%d}, not today")
 except Exception as e:
