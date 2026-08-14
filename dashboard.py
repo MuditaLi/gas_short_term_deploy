@@ -49,8 +49,8 @@ def today_ts() -> pd.Timestamp:
     return pd.Timestamp(datetime.today().date())
 
 
-HISTORY_DAYS = 5        # past days shown, up to and including today
-FORECAST_DAYS = 5       # days shown beyond today, i.e. tomorrow + 4
+HISTORY_DAYS = 3        # past days shown, up to and including today
+FORECAST_DAYS = 6       # days shown beyond today, i.e. t+1 through t+6
 
 
 @st.cache_data(ttl=600)
