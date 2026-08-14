@@ -182,7 +182,7 @@ def balance_figure(df: pd.DataFrame, title: str, yrange=None) -> go.Figure:
     return fig
 
 
-st.set_page_config(page_title='Gas Short-Term Outlook & Signals', page_icon=':bar_chart:', layout='wide')
+st.set_page_config(page_title='Gas Short-Term Outlook & Signals', page_icon=':arrow_up:', layout='wide')
 st.title('Gas Short-Term Outlook & Signals — DE / NL / UK')
 
 status = load_status()
