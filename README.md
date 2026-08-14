@@ -66,9 +66,22 @@ interpreter; each pipeline uses its own `.venv` automatically when it has one.
 2. share.streamlit.io -> New app -> pick this repo, `dashboard.py`, branch master.
 3. Done — every publish pushes and updates the hosted app automatically.
 
-The run controls (price entry, the buttons) only appear when the pipelines are
-checked out beside this repo. On the hosted app they are hidden and the page is
-read-only.
+What the page offers depends on where it runs:
+
+| | local (pipelines beside this repo) | hosted |
+|---|---|---|
+| view forecasts + latest signal | yes | yes |
+| enter the 09:00-09:30 prices | yes — **runs the real signal and logs it** | yes — prices the entry, result shown but **not logged** |
+| run morning update / publish | yes | no, and never can |
+
+The hosted page cannot reach Trayport, CE or the pipeline checkouts, so it
+applies the published model (`signal_model.py`) to the prices you type. To make
+that possible, publish also exports `price_history.csv`,
+`spread_model_params.csv` and `spread_spec.json` into `data/`. The spec
+constants are read out of `3-spread_forecast.py` at publish time rather than
+copied, and the page re-derives the newest logged signal on every load — if it
+cannot reproduce it, it says so in red instead of showing a number you might
+trust. The tradeable record always comes from the desk machine.
 
 ## Morning routine
 

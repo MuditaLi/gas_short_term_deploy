@@ -168,6 +168,7 @@ class Step:
     title: str
     project: Path
     script: str
+    args: tuple = ()
 
     def is_fresh(self) -> bool:
         raise NotImplementedError
@@ -180,7 +181,7 @@ class Step:
             return True, 'skipped (already fresh)'
         say(f"\n== {self.title} ==")
         t0 = time.time()
-        rc = run_script(self.project, self.script)
+        rc = run_script(self.project, self.script, self.args)
         mins = (time.time() - t0) / 60
         if rc != 0:
             say(f"FAILED {self.title} (exit {rc}) after {mins:.1f} min")
@@ -204,8 +205,22 @@ class FlowStep(Step):
         return fresh(path, today()) and covers(path, today() + pd.Timedelta(days=1))
 
 
-SND_STEP  = SndStep('snd',  'S&D pipeline (daily_storage_forecast)', SND,  'main.py')
-FLOW_STEP = FlowStep('flow', 'DA_M1 storage flow forecast',          DAM1, '2-storage_flow_forecast.py')
+class PriceStep(Step):
+    """Refreshes DA.csv/M1.csv so the published price history is current.
+
+    The signal and backfill stages refresh prices as a side effect, but the
+    hosted dashboard's calculator needs the close-spread history to be today's
+    even on a morning-only run - otherwise it would compute gap/vol from one
+    day less history than the desk machine and quietly disagree.
+    """
+    def is_fresh(self):
+        return all(written_today(DAM1 / 'inputs' / f) for f in ('DA.csv', 'M1.csv'))
+
+
+SND_STEP   = SndStep('snd',  'S&D pipeline (daily_storage_forecast)', SND,  'main.py')
+FLOW_STEP  = FlowStep('flow', 'DA_M1 storage flow forecast',          DAM1, '2-storage_flow_forecast.py')
+PRICE_STEP = PriceStep('prices', 'DA/M1 price history refresh',       DAM1,
+                       '3-spread_forecast.py', ('--refresh-only',))
 
 
 # ----------------------------------------------------------------- status ----
@@ -264,6 +279,60 @@ def dedup_signal_log(path: Path) -> int:
     return dropped
 
 
+SPEC_KEYS = ('GAP_W', 'VOL_W', 'CONF_REF', 'CONF_PLT', 'TC', 'VOL_FLOOR')
+PRICE_HISTORY_DAYS = 200          # comfortably covers the 21d vol window
+
+
+def export_model_inputs() -> dict:
+    """Publish what the hosted dashboard needs to price an entry itself.
+
+    The spec constants are read out of 3-spread_forecast.py rather than copied,
+    so a change there cannot leave the hosted calculator on a stale spec.
+    Best-effort: if either export fails the calculator simply stays hidden,
+    which must never block publishing the forecasts.
+    """
+    info = {}
+
+    # close-spread history, from the same CSVs the signal script uses
+    try:
+        frames = {}
+        for leg in ('DA', 'M1'):
+            df = pd.read_csv(DAM1 / 'inputs' / f'{leg}.csv', index_col=0, parse_dates=True)
+            frames[f'{leg.lower()}_vwap'] = df['vwap']
+        px = pd.DataFrame(frames).dropna(how='all').tail(PRICE_HISTORY_DAYS)
+        px.to_csv(DATA / 'price_history.csv', index_label='date')
+        last = px.dropna().index.max()
+        info['price_history.csv'] = {
+            'source': 'DA_M1', 'published': True,
+            'data_through': f'{last:%Y-%m-%d}' if pd.notna(last) else None,
+            'built': f'{datetime.now():%Y-%m-%d %H:%M}',
+        }
+        say(f'  price_history.csv -> data\\  (closes through {last:%Y-%m-%d})')
+    except Exception as exc:
+        info['price_history.csv'] = {'published': False, 'reason': str(exc)}
+        say(f'  price_history.csv skipped - {exc}')
+
+    # frozen spec, read from the script that owns it (its own venv, so the
+    # module's imports resolve)
+    try:
+        code = ('import json, importlib.util as u;'
+                "s = u.spec_from_file_location('m', '3-spread_forecast.py');"
+                'm = u.module_from_spec(s); s.loader.exec_module(m);'
+                f'print(json.dumps({{k: getattr(m, k) for k in {SPEC_KEYS!r}}}))')
+        done = subprocess.run([python_for(DAM1), '-c', code], cwd=str(DAM1),
+                              capture_output=True, text=True, timeout=120)
+        spec = json.loads(done.stdout.strip().splitlines()[-1])
+        (DATA / 'spread_spec.json').write_text(json.dumps(spec, indent=2), encoding='utf-8')
+        info['spread_spec.json'] = {'source': 'DA_M1', 'published': True,
+                                    'built': f'{datetime.now():%Y-%m-%d %H:%M}'}
+        say(f"  spread_spec.json -> data\\  (gap {spec['GAP_W']}d / vol {spec['VOL_W']}d)")
+    except Exception as exc:
+        info['spread_spec.json'] = {'published': False, 'reason': str(exc)}
+        say(f'  spread_spec.json skipped - {exc}')
+
+    return info
+
+
 def publish(allow_stale=False, push=True) -> bool:
     """Copy validated outputs into data\\ and push. Stale files are not copied."""
     say('\n== publish ==')
@@ -276,6 +345,7 @@ def publish(allow_stale=False, push=True) -> bool:
         (FLOW_FILE,     DAM1 / 'outputs', tmr,  True),
         (SIGNAL_FILE,   DAM1 / 'outputs', None, False),
         (BACKFILL_FILE, DAM1 / 'outputs', None, False),
+        ('spread_model_params.csv', DAM1 / 'outputs', None, False),
     ]
 
     files, blocked = {}, []
@@ -319,6 +389,8 @@ def publish(allow_stale=False, push=True) -> bool:
                 info['reason'] = f'stale, forced: {reason}'
             say(f"  {name} -> data\\  (data through {info['data_through']})")
         files[name] = info
+
+    files.update(export_model_inputs())
 
     # signal freshness is reported, never gated: the morning publish runs
     # hours before the 09:30 signal exists
@@ -374,14 +446,17 @@ def stage_morning(force=False, push=True, allow_stale=False) -> bool:
     record_stage('snd', ok_snd, d_snd)
     ok_flow, d_flow = FLOW_STEP.run(force)
     record_stage('flow', ok_flow, d_flow)
+    ok_px, d_px = PRICE_STEP.run(force)
+    record_stage('prices', ok_px, d_px)
 
     ok_pub = publish(allow_stale=allow_stale, push=push)
     record_stage('publish', ok_pub, 'clean' if ok_pub else 'incomplete - see blocked')
 
-    if not (ok_snd and ok_flow and ok_pub):
-        failed = [n for n, ok in (('S&D', ok_snd), ('flow', ok_flow), ('publish', ok_pub)) if not ok]
+    if not (ok_snd and ok_flow and ok_px and ok_pub):
+        failed = [n for n, ok in (('S&D', ok_snd), ('flow', ok_flow),
+                                  ('prices', ok_px), ('publish', ok_pub)) if not ok]
         notify('Gas morning update failed', f"{', '.join(failed)} - see {LOGS.name}\\ and the dashboard")
-    return ok_snd and ok_flow and ok_pub
+    return ok_snd and ok_flow and ok_px and ok_pub
 
 
 def stage_signal(da, m1, push=True, allow_stale=False) -> bool:

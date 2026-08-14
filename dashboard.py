@@ -27,6 +27,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))       # import works whatever cwd the host launches from
+import signal_model                 # noqa: E402
+
 DATA = HERE / 'data'
 
 # pipelines reachable = we are on the host that can run them
@@ -259,6 +262,64 @@ if LOCAL:
             code, output = st.session_state['run_output']
             (st.success if code == 0 else st.error)(f'last run finished with exit {code}')
             st.code(output[-6000:] or '(no output)')
+
+# ── hosted: price the entry without the pipelines ────────────────────────────
+elif signal_model.available(DATA):
+    have_today = sig is not None and sig['date'].date() == datetime.today().date()
+    with st.expander('Enter the 09:00-09:30 prices', expanded=not have_today):
+        st.caption('This page cannot reach the pipelines, so it applies the '
+                   'published model to the prices you enter. The result is shown '
+                   'here only — the recorded signal is the one the desk machine '
+                   'writes to the log.')
+        with st.form('hosted_signal_form'):
+            g1, g2, g3 = st.columns([2, 2, 3])
+            da_in = g1.text_input('DA 09:00-09:30 vwap', placeholder='60.42')
+            m1_in = g2.text_input('M1 09:00-09:30 vwap', placeholder='60.66')
+            g3.write('')
+            priced = g3.form_submit_button('Price this entry', type='primary')
+
+        if priced:
+            try:
+                out = signal_model.evaluate(DATA,
+                                            float(da_in.strip().replace(',', '.')),
+                                            float(m1_in.strip().replace(',', '.')))
+            except ValueError as exc:
+                st.error(f'cannot price this entry: {exc}')
+            else:
+                spec = out['spec']
+                arrow = '&#9650;' if out['pred'] > 0 else '&#9660;'
+                colour = '#09ab3b' if out['pred'] > 0 else '#ff2b2b'
+                side = ('LONG spread (long DA / short M1)' if out['pred'] > 0
+                        else 'SHORT spread (short DA / long M1)')
+                st.markdown(f"### <span style='color:{colour}'>{arrow}</span> {side}",
+                            unsafe_allow_html=True)
+                h1, h2, h3 = st.columns(3)
+                h1.metric('Confidence', f"{out['confidence'] * 200:.0f}%",
+                          delta='TRADE' if out['ref_trade'] else
+                                f"below gate ({spec['CONF_REF'] * 200:.0f}%) - no trade",
+                          delta_color='normal' if out['ref_trade'] else 'off')
+                h2.metric('p_up', f"{out['p_up']:.3f}")
+                h3.metric('PILOT gate', 'TRADE' if out['pilot_trade'] else 'no trade',
+                          help=f"needs confidence > {spec['CONF_PLT'] * 200:.0f}% "
+                               f"and vol21 > {spec['VOL_FLOOR']:.3f}")
+                st.caption(
+                    f"open_spread {out['open_spread']:+.3f} · stor_D1 {out['stor_D1']:+.2f} · "
+                    f"gap_vol {out['gap_vol']:+.3f} · gap_morning {out['gap_morning']:+.3f} · "
+                    f"vol21 {out['vol21']:.3f} · last close {out['last_close_day']:%Y-%m-%d}")
+
+                stale = (pd.Timestamp(datetime.today().date()) - out['last_close_day']).days
+                if stale > 4:
+                    st.warning(f"the newest published close is {stale} days old — "
+                               f"gap_vol is computed from stale history")
+
+        # end-to-end check that this page still agrees with the pipeline
+        check = signal_model.verify_against_log(DATA)
+        if check and not check['ok']:
+            st.error(f"this calculator disagrees with the logged signal — do not "
+                     f"trust it until the published model is refreshed "
+                     f"({check['detail']})")
+        elif check:
+            st.caption(f"self-check: {check['detail']}")
 
 # ── overview: balance per country, S&D pipeline vs DA_M1 flow model ─────────
 st.subheader('Storage balance by country (mcm/d)')
