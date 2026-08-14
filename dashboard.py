@@ -2,14 +2,23 @@
 Gas Short-Term Outlook & Signals dashboard (DE / NL / UK).
 
 Self-contained deploy version: reads everything from the repo-local data/
-folder (populated by publish_data.ps1 / spread_signal.ps1 from the two
-pipelines). Suitable for Streamlit Community Cloud or any host with just
-this repo checked out.
+folder (populated by run_day.py from the two pipelines). Suitable for
+Streamlit Community Cloud or any host with just this repo checked out.
+
+On the host that has the pipelines checked out beside this repo, the page also
+drives them: the 09:00-09:30 prices are typed in here (Trayport embargoes
+intraday data for 24h, so they cannot be fetched) and run_day.py runs the
+signal and publishes. On a cloud host those controls are hidden and the page
+is read-only.
 
 Run:
     streamlit run dashboard.py
 """
+import json
 import math
+import os
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -17,7 +26,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-DATA = Path(__file__).resolve().parent / 'data'
+HERE = Path(__file__).resolve().parent
+DATA = HERE / 'data'
+
+# pipelines reachable = we are on the host that can run them
+GITHUB = Path(os.environ.get('GAS_GITHUB_ROOT') or HERE.parent)
+LOCAL = (GITHUB / 'quant_strats' / 'DA_M1').exists()
 
 COUNTRIES = {'DE': 'snd_de.csv', 'NL': 'snd_nl.csv', 'UK': 'snd_uk.csv'}
 DEMAND_COMPONENTS = ['GFP', 'LDZ', 'Industry']          # kept if present per country
@@ -45,15 +59,44 @@ def load_latest_signal() -> pd.Series:
     return log.sort_values('issued').iloc[-1]
 
 
-def data_age_hours() -> float:
-    """Hours since the data was published (stamp written by publish_data.ps1;
-    falls back to file mtime, which on a cloud host = deploy time)."""
-    stamp = DATA / '_updated.txt'
+@st.cache_data(ttl=60)
+def load_status() -> dict:
+    """Per-stage / per-file record written by run_day.py."""
     try:
-        ts = pd.Timestamp(stamp.read_text().strip())
+        return json.loads((DATA / 'status.json').read_text(encoding='utf-8'))
     except Exception:
-        ts = pd.Timestamp(datetime.fromtimestamp((DATA / 'snd_de.csv').stat().st_mtime))
+        return {}
+
+
+def data_age_hours(status: dict) -> float:
+    """Hours since the last clean publish (status.json, then the legacy stamp,
+    then file mtime -- which on a cloud host is the deploy time)."""
+    for ts_text in (status.get('updated'), _read_stamp()):
+        if ts_text:
+            try:
+                return (pd.Timestamp(datetime.now()) - pd.Timestamp(ts_text)).total_seconds() / 3600
+            except Exception:
+                pass
+    ts = pd.Timestamp(datetime.fromtimestamp((DATA / 'snd_de.csv').stat().st_mtime))
     return (pd.Timestamp(datetime.now()) - ts).total_seconds() / 3600
+
+
+def _read_stamp():
+    try:
+        return (DATA / '_updated.txt').read_text().strip()
+    except Exception:
+        return None
+
+
+def run_stage(stage_args: list, message: str) -> None:
+    """Run run_day.py and stash the result for display after the rerun."""
+    with st.spinner(message):
+        done = subprocess.run([sys.executable, str(HERE / 'run_day.py'), *stage_args],
+                              cwd=str(HERE), capture_output=True, text=True,
+                              encoding='utf-8', errors='replace')
+    st.session_state['run_output'] = (done.returncode,
+                                      (done.stdout or '') + (done.stderr or ''))
+    st.cache_data.clear()
 
 
 def mark_tomorrow(fig: go.Figure, index: pd.DatetimeIndex) -> None:
@@ -125,15 +168,38 @@ def balance_figure(df: pd.DataFrame, title: str, yrange=None) -> go.Figure:
 st.set_page_config(page_title='Gas Short-Term Outlook & Signals', page_icon=':bar_chart:', layout='wide')
 st.title('Gas Short-Term Outlook & Signals — DE / NL / UK')
 
-age = data_age_hours()
+status = load_status()
+age = data_age_hours(status)
+blocked = status.get('blocked') or []
 stamp = f'data published {age:.1f}h ago'
-if age > 30:
+
+if blocked:
+    # publish held these back rather than passing stale numbers off as fresh
+    st.error(f"{stamp} — {len(blocked)} file(s) held back as stale, "
+             f"showing the last good data: {'; '.join(blocked)}")
+elif age > 30:
     st.warning(f'{stamp} — run the morning update + publish')
 else:
     st.caption(stamp)
 
+if status.get('stages'):
+    with st.expander('pipeline status', expanded=bool(blocked)):
+        st.dataframe(pd.DataFrame([
+            {'stage': k, 'status': v.get('status'), 'finished': v.get('finished'),
+             'detail': v.get('detail')}
+            for k, v in status['stages'].items()
+        ]), hide_index=True, use_container_width=True)
+        if status.get('files'):
+            st.dataframe(pd.DataFrame([
+                {'file': k, 'published': v.get('published'),
+                 'data through': v.get('data_through'), 'built': v.get('built'),
+                 'note': v.get('reason', '')}
+                for k, v in status['files'].items()
+            ]), hide_index=True, use_container_width=True)
+
 # ── latest DA-M1 spread signal ───────────────────────────────────────────────
 st.subheader('Latest DA-M1 spread signal')
+sig = None
 try:
     sig = load_latest_signal()
     if sig['pred'] > 0:
@@ -154,6 +220,45 @@ try:
         st.warning(f"signal is for {sig['date']:%Y-%m-%d}, not today")
 except Exception as e:
     st.warning(f'spread signal unavailable: {e}')
+
+# ── run controls (host with the pipelines only) ──────────────────────────────
+if LOCAL:
+    have_today = sig is not None and sig['date'].date() == datetime.today().date()
+    with st.expander("Enter the 09:00-09:30 prices / run the pipelines",
+                     expanded=not have_today):
+        st.caption('Trayport embargoes intraday data for 24h, so today\'s entry '
+                   'prices are the one input that cannot be fetched — read them '
+                   'off the screen after 09:30.')
+        with st.form('signal_form'):
+            f1, f2, f3 = st.columns([2, 2, 3])
+            da_in = f1.text_input('DA 09:00-09:30 vwap', placeholder='60.42')
+            m1_in = f2.text_input('M1 09:00-09:30 vwap', placeholder='60.66')
+            f3.write('')
+            submitted = f3.form_submit_button('Run signal + publish', type='primary')
+        if submitted:
+            try:
+                da_v = float(da_in.strip().replace(',', '.'))
+                m1_v = float(m1_in.strip().replace(',', '.'))
+            except ValueError:
+                st.error('enter both prices as numbers')
+            else:
+                run_stage(['signal', '--da', str(da_v), '--m1', str(m1_v)],
+                          'running the spread signal + publishing...')
+                st.rerun()
+
+        b1, b2, _ = st.columns([2, 2, 3])
+        if b1.button('Run morning update', help='S&D + flow forecast, then publish — '
+                                                'takes ~20 min, keep this tab open'):
+            run_stage(['morning'], 'running the morning update (~20 min)...')
+            st.rerun()
+        if b2.button('Publish only', help='re-copy validated outputs into data\\ and push'):
+            run_stage(['publish'], 'publishing...')
+            st.rerun()
+
+        if 'run_output' in st.session_state:
+            code, output = st.session_state['run_output']
+            (st.success if code == 0 else st.error)(f'last run finished with exit {code}')
+            st.code(output[-6000:] or '(no output)')
 
 # ── overview: balance per country, S&D pipeline vs DA_M1 flow model ─────────
 st.subheader('Storage balance by country (mcm/d)')
