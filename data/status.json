@@ -1,0 +1,81 @@
+{
+  "files": {
+    "snd_de.csv": {
+      "source": "\\\\xdcifs.eetcifs.local\\XDUsers$\\mli.EETPV\\Documents\\GitHub\\daily_storage_forecast\\outputs\\snd_de.csv",
+      "data_through": "2026-08-20",
+      "built": "2026-08-14 09:56",
+      "published": true
+    },
+    "snd_nl.csv": {
+      "source": "\\\\xdcifs.eetcifs.local\\XDUsers$\\mli.EETPV\\Documents\\GitHub\\daily_storage_forecast\\outputs\\snd_nl.csv",
+      "data_through": "2026-08-20",
+      "built": "2026-08-14 09:56",
+      "published": true
+    },
+    "snd_uk.csv": {
+      "source": "\\\\xdcifs.eetcifs.local\\XDUsers$\\mli.EETPV\\Documents\\GitHub\\daily_storage_forecast\\outputs\\snd_uk.csv",
+      "data_through": "2026-08-20",
+      "built": "2026-08-14 09:56",
+      "published": true
+    },
+    "country_balance.csv": {
+      "source": "\\\\xdcifs.eetcifs.local\\XDUsers$\\mli.EETPV\\Documents\\GitHub\\daily_storage_forecast\\outputs\\country_balance.csv",
+      "data_through": "2026-08-20",
+      "built": "2026-08-14 09:56",
+      "published": true
+    },
+    "storage_flow_forecast.csv": {
+      "source": "\\\\xdcifs.eetcifs.local\\XDUsers$\\mli.EETPV\\Documents\\GitHub\\quant_strats\\DA_M1\\outputs\\storage_flow_forecast.csv",
+      "data_through": "2026-08-25",
+      "built": "2026-08-14 10:00",
+      "published": true
+    },
+    "spread_signal_log.csv": {
+      "source": "\\\\xdcifs.eetcifs.local\\XDUsers$\\mli.EETPV\\Documents\\GitHub\\quant_strats\\DA_M1\\outputs\\spread_signal_log.csv",
+      "data_through": "2026-08-14",
+      "built": "2026-08-14 13:54",
+      "published": true
+    },
+    "spread_signal_backfill.csv": {
+      "source": "\\\\xdcifs.eetcifs.local\\XDUsers$\\mli.EETPV\\Documents\\GitHub\\quant_strats\\DA_M1\\outputs\\spread_signal_backfill.csv",
+      "data_through": "2026-08-13",
+      "built": "2026-08-14 13:28",
+      "published": true
+    }
+  },
+  "blocked": [],
+  "signal": {
+    "date": "2026-08-14",
+    "issued": "2026-08-14 13:54",
+    "is_today": true
+  },
+  "updated": "2026-08-14 13:54:42",
+  "host": "eetp-vdi-xd2622",
+  "stages": {
+    "publish": {
+      "status": "ok",
+      "detail": "clean",
+      "finished": "2026-08-14 13:47"
+    },
+    "snd": {
+      "status": "ok",
+      "detail": "skipped (already fresh)",
+      "finished": "2026-08-14 13:32"
+    },
+    "flow": {
+      "status": "ok",
+      "detail": "skipped (already fresh)",
+      "finished": "2026-08-14 13:32"
+    },
+    "signal": {
+      "status": "ok",
+      "detail": "ok",
+      "finished": "2026-08-14 13:54"
+    },
+    "backfill": {
+      "status": "ok",
+      "detail": "2026-08-13 already recorded",
+      "finished": "2026-08-14 13:48"
+    }
+  }
+}
