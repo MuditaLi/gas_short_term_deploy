@@ -49,9 +49,23 @@ def today_ts() -> pd.Timestamp:
     return pd.Timestamp(datetime.today().date())
 
 
+HISTORY_DAYS = 5        # past days shown, up to and including today
+FORECAST_DAYS = 5       # days shown beyond today, i.e. tomorrow + 4
+
+
 @st.cache_data(ttl=600)
 def load_csv(fname: str) -> pd.DataFrame:
-    return pd.read_csv(DATA / fname, parse_dates=['date']).set_index('date').round(1)
+    """Load a published CSV, clipped to the common window.
+
+    The pipelines emit different spans (the S&D tables run further back than
+    the flow model, which forecasts further forward), so every panel is clipped
+    to the same dates - otherwise the tables sit side by side with different
+    histories and horizons.
+    """
+    df = pd.read_csv(DATA / fname, parse_dates=['date']).set_index('date').round(1)
+    lo = today_ts() - pd.Timedelta(days=HISTORY_DAYS)
+    hi = today_ts() + pd.Timedelta(days=FORECAST_DAYS)
+    return df[(df.index >= lo) & (df.index <= hi)]
 
 
 @st.cache_data(ttl=120)
@@ -315,11 +329,14 @@ elif signal_model.available(DATA):
         # end-to-end check that this page still agrees with the pipeline
         check = signal_model.verify_against_log(DATA)
         if check and not check['ok']:
-            st.error(f"this calculator disagrees with the logged signal — do not "
-                     f"trust it until the published model is refreshed "
-                     f"({check['detail']})")
+            st.error(f"this calculator disagrees with the pipeline — do not trust "
+                     f"it until the published model is refreshed ({check['detail']})")
         elif check:
             st.caption(f"self-check: {check['detail']}")
+            if check['moved']:
+                st.caption('inputs have been refreshed since that signal was '
+                           'issued, so a re-price now differs: '
+                           + '; '.join(check['moved']))
 
 # ── overview: balance per country, S&D pipeline vs DA_M1 flow model ─────────
 st.subheader('Storage balance by country (mcm/d)')

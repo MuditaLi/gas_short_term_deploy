@@ -89,28 +89,55 @@ def evaluate(data_dir, da_price: float, m1_price: float, trade_day=None) -> dict
     }
 
 
-def verify_against_log(data_dir, tol: float = 5e-4):
-    """Re-derive the newest logged signal from published data.
+# the log rounds its features to 3dp, so reproducing p_up from them carries a
+# little rounding noise; this is far tighter than any real drift would be
+TOL = 2e-3
 
-    The log stores the prices that were entered and the resulting p_up, so
-    recomputing it here is an end-to-end check that this module still agrees
-    with the pipeline. Returns None when the check cannot be run (the flow
-    forecast only carries the current issue, so older days are not
-    reproducible), otherwise {'ok': bool, 'detail': str}.
+
+def verify_against_log(data_dir, tol: float = TOL):
+    """Check the published model against the newest logged signal.
+
+    Two things can disagree here and they mean very different things:
+
+    * Applying the published coefficients to the LOGGED features must
+      reproduce the logged p_up. If it does not, the published model no
+      longer matches the pipeline - a bad retrain export, say - and nothing
+      on this page can be trusted.
+    * The features recomputed from today's published inputs may legitimately
+      differ, because the forecasts behind them are refreshed through the day.
+      A signal issued at 09:30 was priced on the storage forecast as it stood
+      then. That is the inputs moving, not the model drifting, so it is
+      reported as a note rather than a failure.
+
+    Returns None when the check cannot run, else {'ok', 'detail', 'moved'}.
     """
     try:
         log = pd.read_csv(data_dir / 'spread_signal_log.csv', parse_dates=['date'])
         row = log[log['date'] == log['date'].max()].sort_values('issued').iloc[-1]
-        got = evaluate(data_dir, float(row['da_am']), float(row['m1_am']), row['date'])
+        beta = load_params(data_dir)
     except Exception:
         return None
 
-    diffs = [f"{k} {got[k]:+.4f} vs logged {float(row[k]):+.4f}"
-             for k in ('stor_D1', 'gap_vol', 'gap_morning', 'p_up')
-             if abs(got[k] - float(row[k])) > tol]
-    if diffs:
-        return {'ok': False,
-                'detail': f"{row['date']:%Y-%m-%d}: " + '; '.join(diffs)}
-    return {'ok': True,
+    z = (beta['const']
+         + beta['stor_D1']     * float(row['stor_D1'])
+         + beta['gap_vol']     * float(row['gap_vol'])
+         + beta['gap_morning'] * float(row['gap_morning']))
+    p_up = float(1.0 / (1.0 + np.exp(-z)))
+    if abs(p_up - float(row['p_up'])) > tol:
+        return {'ok': False, 'moved': [],
+                'detail': f"published coefficients give p_up {p_up:.4f} for the "
+                          f"{row['date']:%Y-%m-%d} features, but the pipeline "
+                          f"logged {float(row['p_up']):.4f}"}
+
+    moved = []
+    try:
+        got = evaluate(data_dir, float(row['da_am']), float(row['m1_am']), row['date'])
+        moved = [f"{k} now {got[k]:+.3f} vs {float(row[k]):+.3f} at issue"
+                 for k in ('stor_D1', 'gap_vol', 'gap_morning')
+                 if abs(got[k] - float(row[k])) > 5e-3]
+    except Exception:
+        pass
+
+    return {'ok': True, 'moved': moved,
             'detail': f"reproduces the {row['date']:%Y-%m-%d} signal "
-                      f"(p_up {got['p_up']:.4f})"}
+                      f"(p_up {p_up:.4f})"}

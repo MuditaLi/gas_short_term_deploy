@@ -3,31 +3,31 @@
     "snd_de.csv": {
       "source": "daily_storage_forecast",
       "data_through": "2026-08-20",
-      "built": "2026-08-14 09:56",
+      "built": "2026-08-14 14:26",
       "published": true
     },
     "snd_nl.csv": {
       "source": "daily_storage_forecast",
       "data_through": "2026-08-20",
-      "built": "2026-08-14 09:56",
+      "built": "2026-08-14 14:26",
       "published": true
     },
     "snd_uk.csv": {
       "source": "daily_storage_forecast",
       "data_through": "2026-08-20",
-      "built": "2026-08-14 09:56",
+      "built": "2026-08-14 14:26",
       "published": true
     },
     "country_balance.csv": {
       "source": "daily_storage_forecast",
       "data_through": "2026-08-20",
-      "built": "2026-08-14 09:56",
+      "built": "2026-08-14 14:26",
       "published": true
     },
     "storage_flow_forecast.csv": {
       "source": "DA_M1",
       "data_through": "2026-08-25",
-      "built": "2026-08-14 10:00",
+      "built": "2026-08-14 14:27",
       "published": true
     },
     "spread_signal_log.csv": {
@@ -52,12 +52,12 @@
       "source": "DA_M1",
       "published": true,
       "data_through": "2026-08-12",
-      "built": "2026-08-14 14:09"
+      "built": "2026-08-14 14:28"
     },
     "spread_spec.json": {
       "source": "DA_M1",
       "published": true,
-      "built": "2026-08-14 14:09"
+      "built": "2026-08-14 14:28"
     }
   },
   "blocked": [],
@@ -66,13 +66,13 @@
     "issued": "2026-08-14 13:54",
     "is_today": true
   },
-  "updated": "2026-08-14 14:09:49",
+  "updated": "2026-08-14 14:28:45",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-08-14 14:09"
+      "finished": "2026-08-14 14:28"
     },
     "snd": {
       "status": "ok",
