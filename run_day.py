@@ -241,6 +241,9 @@ def save_status(**patch):
         else:
             st[key] = value
     st['updated'] = f'{datetime.now():%Y-%m-%d %H:%M:%S}'
+    # 'updated' is naive local time and is only meaningful on this machine; the
+    # hosted dashboard runs in UTC and needs an absolute instant to age the data
+    st['updated_epoch'] = round(time.time())
     st['host'] = socket.gethostname()
     DATA.mkdir(parents=True, exist_ok=True)
     STATUS.write_text(json.dumps(st, indent=2), encoding='utf-8')

@@ -19,6 +19,7 @@ import math
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -87,15 +88,22 @@ def load_status() -> dict:
 
 def data_age_hours(status: dict) -> float:
     """Hours since the last clean publish (status.json, then the legacy stamp,
-    then file mtime -- which on a cloud host is the deploy time)."""
+    then file mtime -- which on a cloud host is the deploy time).
+
+    'updated_epoch' is preferred because it is an absolute instant: 'updated'
+    is naive local time on the publishing machine, and the hosted container
+    runs in UTC, so subtracting it from a local now() reported a negative age.
+    """
+    epoch = status.get('updated_epoch')
+    if isinstance(epoch, (int, float)):
+        return (time.time() - epoch) / 3600
     for ts_text in (status.get('updated'), _read_stamp()):
         if ts_text:
             try:
                 return (pd.Timestamp(datetime.now()) - pd.Timestamp(ts_text)).total_seconds() / 3600
             except Exception:
                 pass
-    ts = pd.Timestamp(datetime.fromtimestamp((DATA / 'snd_de.csv').stat().st_mtime))
-    return (pd.Timestamp(datetime.now()) - ts).total_seconds() / 3600
+    return (time.time() - (DATA / 'snd_de.csv').stat().st_mtime) / 3600
 
 
 def _read_stamp():
