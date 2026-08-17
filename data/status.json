@@ -2,38 +2,38 @@
   "files": {
     "snd_de.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-08-20",
-      "built": "2026-08-14 14:26",
+      "data_through": "2026-08-23",
+      "built": "2026-08-17 09:18",
       "published": true
     },
     "snd_nl.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-08-20",
-      "built": "2026-08-14 14:26",
+      "data_through": "2026-08-23",
+      "built": "2026-08-17 09:18",
       "published": true
     },
     "snd_uk.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-08-20",
-      "built": "2026-08-14 14:26",
+      "data_through": "2026-08-23",
+      "built": "2026-08-17 09:18",
       "published": true
     },
     "country_balance.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-08-20",
-      "built": "2026-08-14 14:26",
+      "data_through": "2026-08-23",
+      "built": "2026-08-17 09:18",
       "published": true
     },
     "storage_flow_forecast.csv": {
       "source": "DA_M1",
-      "data_through": "2026-08-25",
-      "built": "2026-08-14 14:27",
+      "data_through": "2026-08-28",
+      "built": "2026-08-17 09:20",
       "published": true
     },
     "spread_signal_log.csv": {
       "source": "DA_M1",
-      "data_through": "2026-08-14",
-      "built": "2026-08-14 13:54",
+      "data_through": "2026-08-17",
+      "built": "2026-08-17 09:23",
       "published": true
     },
     "spread_signal_backfill.csv": {
@@ -51,22 +51,22 @@
     "price_history.csv": {
       "source": "DA_M1",
       "published": true,
-      "data_through": "2026-08-12",
-      "built": "2026-08-14 14:28"
+      "data_through": "2026-08-14",
+      "built": "2026-08-17 09:30"
     },
     "spread_spec.json": {
       "source": "DA_M1",
       "published": true,
-      "built": "2026-08-14 14:28"
+      "built": "2026-08-17 09:30"
     }
   },
   "blocked": [],
   "signal": {
-    "date": "2026-08-14",
-    "issued": "2026-08-14 13:54",
+    "date": "2026-08-17",
+    "issued": "2026-08-17 09:23",
     "is_today": true
   },
-  "updated": "2026-08-14 14:28:45",
+  "updated": "2026-08-17 09:30:22",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
