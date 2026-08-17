@@ -38,8 +38,8 @@
     },
     "spread_signal_backfill.csv": {
       "source": "DA_M1",
-      "data_through": "2026-08-13",
-      "built": "2026-08-14 13:28",
+      "data_through": "2026-08-14",
+      "built": "2026-08-17 09:34",
       "published": true
     },
     "spread_model_params.csv": {
@@ -52,12 +52,12 @@
       "source": "DA_M1",
       "published": true,
       "data_through": "2026-08-14",
-      "built": "2026-08-17 09:30"
+      "built": "2026-08-17 09:34"
     },
     "spread_spec.json": {
       "source": "DA_M1",
       "published": true,
-      "built": "2026-08-17 09:30"
+      "built": "2026-08-17 09:34"
     }
   },
   "blocked": [],
@@ -66,13 +66,13 @@
     "issued": "2026-08-17 09:23",
     "is_today": true
   },
-  "updated": "2026-08-17 09:30:22",
+  "updated": "2026-08-17 09:34:34",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-08-14 14:28"
+      "finished": "2026-08-17 09:30"
     },
     "snd": {
       "status": "ok",
@@ -91,8 +91,8 @@
     },
     "backfill": {
       "status": "ok",
-      "detail": "2026-08-13 already recorded",
-      "finished": "2026-08-14 13:48"
+      "detail": "ok",
+      "finished": "2026-08-17 09:34"
     }
   }
 }
