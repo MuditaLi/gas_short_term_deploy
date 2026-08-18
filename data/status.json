@@ -52,12 +52,12 @@
       "source": "DA_M1",
       "published": true,
       "data_through": "2026-08-14",
-      "built": "2026-08-18 09:52"
+      "built": "2026-08-18 09:55"
     },
     "spread_spec.json": {
       "source": "DA_M1",
       "published": true,
-      "built": "2026-08-18 09:52"
+      "built": "2026-08-18 09:55"
     }
   },
   "blocked": [],
@@ -66,13 +66,13 @@
     "issued": "2026-08-18 09:52",
     "is_today": true
   },
-  "updated": "2026-08-18 09:52:14",
+  "updated": "2026-08-18 09:55:23",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-08-18 09:31"
+      "finished": "2026-08-18 09:55"
     },
     "snd": {
       "status": "ok",
@@ -100,5 +100,5 @@
       "finished": "2026-08-18 09:31"
     }
   },
-  "updated_epoch": 1787039535
+  "updated_epoch": 1787039723
 }
