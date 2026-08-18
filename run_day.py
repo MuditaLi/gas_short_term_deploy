@@ -408,8 +408,6 @@ def publish(allow_stale=False, push=True) -> bool:
         except Exception as exc:
             sig = {'error': str(exc)}
 
-    save_status(files=files, blocked=blocked, signal=sig)
-
     if blocked:
         say(f'PUBLISH INCOMPLETE - {len(blocked)} file(s) held back, previous data kept')
     else:
@@ -417,7 +415,22 @@ def publish(allow_stale=False, push=True) -> bool:
         # data that was held back (kept for older dashboard builds)
         (DATA / '_updated.txt').write_text(f'{datetime.now():%Y-%m-%d %H:%M:%S}', encoding='utf-8')
 
+    # publish records its own stage result, and does it *before* git_publish():
+    # status.json is committed, so anything written after the commit only
+    # reaches the hosted dashboard on the next run - and leaves data\ dirty in
+    # the working tree meanwhile. Callers must not record 'publish' themselves.
+    save_status(files=files, blocked=blocked, signal=sig,
+                stages={'publish': {
+                    'status': 'failed' if blocked else 'ok',
+                    'detail': 'incomplete - see blocked' if blocked else 'clean',
+                    'finished': f'{datetime.now():%Y-%m-%d %H:%M}',
+                }})
+
     pushed = git_publish() if push else True
+    if not pushed:
+        # unavoidably after the fact: this describes the commit that was just
+        # made, so only the next publish can carry it to the dashboard
+        record_stage('publish', False, 'committed locally, push failed')
     return not blocked and pushed
 
 
@@ -453,7 +466,6 @@ def stage_morning(force=False, push=True, allow_stale=False) -> bool:
     record_stage('prices', ok_px, d_px)
 
     ok_pub = publish(allow_stale=allow_stale, push=push)
-    record_stage('publish', ok_pub, 'clean' if ok_pub else 'incomplete - see blocked')
 
     if not (ok_snd and ok_flow and ok_px and ok_pub):
         failed = [n for n, ok in (('S&D', ok_snd), ('flow', ok_flow),
@@ -473,10 +485,10 @@ def stage_signal(da, m1, push=True, allow_stale=False) -> bool:
     if not ok:
         say(f'FAILED spread signal (exit {rc})')
         notify('Gas spread signal failed', 'see the dashboard output / logs')
-        return False
+    # publish either way: it is what carries the stage result above to the
+    # dashboard, and holding it back would only strand that status locally
     ok_pub = publish(allow_stale=allow_stale, push=push)
-    record_stage('publish', ok_pub, 'clean' if ok_pub else 'incomplete - see blocked')
-    return ok_pub
+    return ok and ok_pub
 
 
 def stage_backfill(asof=None, push=True, allow_stale=False) -> bool:
@@ -498,9 +510,8 @@ def stage_backfill(asof=None, push=True, allow_stale=False) -> bool:
     record_stage('backfill', ok, 'ok' if ok else f'exit {rc}')
     if not ok:
         say(f'backfill did not complete (exit {rc}) - not fatal')
-        return False
     publish(allow_stale=allow_stale, push=push)
-    return True
+    return ok
 
 
 def stage_check_signal() -> bool:
@@ -542,7 +553,6 @@ def main():
         ok = stage_backfill(args.asof, push, args.allow_stale)
     elif args.stage == 'publish':
         ok = publish(args.allow_stale, push)
-        record_stage('publish', ok, 'clean' if ok else 'incomplete - see blocked')
     else:
         ok = stage_check_signal()
 
