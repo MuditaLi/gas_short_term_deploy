@@ -38,8 +38,8 @@
     },
     "spread_signal_backfill.csv": {
       "source": "DA_M1",
-      "data_through": "2026-08-14",
-      "built": "2026-08-17 09:34",
+      "data_through": "2026-08-17",
+      "built": "2026-08-19 09:39",
       "published": true
     },
     "spread_model_params.csv": {
@@ -52,12 +52,12 @@
       "source": "DA_M1",
       "published": true,
       "data_through": "2026-08-17",
-      "built": "2026-08-19 09:38"
+      "built": "2026-08-19 09:39"
     },
     "spread_spec.json": {
       "source": "DA_M1",
       "published": true,
-      "built": "2026-08-19 09:38"
+      "built": "2026-08-19 09:39"
     }
   },
   "blocked": [],
@@ -66,13 +66,13 @@
     "issued": "2026-08-19 09:38",
     "is_today": true
   },
-  "updated": "2026-08-19 09:38:34",
+  "updated": "2026-08-19 09:39:25",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-08-19 09:38"
+      "finished": "2026-08-19 09:39"
     },
     "snd": {
       "status": "ok",
@@ -90,9 +90,9 @@
       "finished": "2026-08-19 09:38"
     },
     "backfill": {
-      "status": "failed",
-      "detail": "exit 1",
-      "finished": "2026-08-18 09:32"
+      "status": "ok",
+      "detail": "ok",
+      "finished": "2026-08-19 09:39"
     },
     "prices": {
       "status": "ok",
@@ -100,5 +100,5 @@
       "finished": "2026-08-19 09:37"
     }
   },
-  "updated_epoch": 1787125114
+  "updated_epoch": 1787125165
 }
