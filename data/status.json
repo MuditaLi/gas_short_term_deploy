@@ -38,8 +38,8 @@
     },
     "spread_signal_backfill.csv": {
       "source": "DA_M1",
-      "data_through": "2026-08-18",
-      "built": "2026-08-20 09:56",
+      "data_through": "2026-08-19",
+      "built": "2026-08-20 10:00",
       "published": true
     },
     "spread_model_params.csv": {
@@ -52,12 +52,12 @@
       "source": "DA_M1",
       "published": true,
       "data_through": "2026-08-18",
-      "built": "2026-08-20 09:56"
+      "built": "2026-08-20 10:00"
     },
     "spread_spec.json": {
       "source": "DA_M1",
       "published": true,
-      "built": "2026-08-20 09:56"
+      "built": "2026-08-20 10:00"
     }
   },
   "blocked": [],
@@ -66,13 +66,13 @@
     "issued": "2026-08-20 09:55",
     "is_today": true
   },
-  "updated": "2026-08-20 09:56:36",
+  "updated": "2026-08-20 10:00:50",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-08-20 09:56"
+      "finished": "2026-08-20 10:00"
     },
     "snd": {
       "status": "ok",
@@ -92,7 +92,7 @@
     "backfill": {
       "status": "ok",
       "detail": "ok",
-      "finished": "2026-08-20 09:56"
+      "finished": "2026-08-20 10:00"
     },
     "prices": {
       "status": "ok",
@@ -100,5 +100,5 @@
       "finished": "2026-08-20 09:54"
     }
   },
-  "updated_epoch": 1787212596
+  "updated_epoch": 1787212850
 }
