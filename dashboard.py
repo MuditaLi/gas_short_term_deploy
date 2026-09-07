@@ -252,10 +252,10 @@ sig = None
 try:
     sig = load_latest_signal()
     if sig['pred'] > 0:
-        tri, color, direction = '&#9650;', '#09ab3b', 'LONG spread (long DA / short M1)'
+        direction, legs = '\U0001F7E2 LONG spread', 'long DA / short M1'
     else:
-        tri, color, direction = '&#9660;', '#ff2b2b', 'SHORT spread (short DA / long M1)'
-    s1, s_px, s2, s3 = st.columns([1.3, 1.5, 2, 1.3])
+        direction, legs = '\U0001F534 SHORT spread', 'short DA / long M1'
+    s1, s_px, s2, s3 = st.columns([1.3, 1.5, 1.6, 1.3])
     s1.metric('Issued', str(sig['issued']),
               help=f"trade day {sig['date']:%Y-%m-%d}")
     # one tile for the pair keeps both prices on the same baseline
@@ -263,9 +263,9 @@ try:
                 delta=f"{sig['open_spread']:+.3f} DA-M1", delta_color='off',
                 help='entry prices: 09:00-10:00 Amsterdam mid-quote averages from the '
                      'desk snapshots (fetch_vwap.py); below = entry spread DA minus M1')
-    s2.caption('Prediction')
-    s2.markdown(f"### <span style='color:{color}'>{tri}</span> {direction}",
-                unsafe_allow_html=True)
+    # a metric like its neighbours, so the value shares their baseline
+    s2.metric('Prediction', direction, delta=legs, delta_color='off',
+              help='model direction for the DA-M1 spread from entry to the 17:00-17:30 close')
     s3.metric('Confidence', f"{sig['confidence'] * 200:.0f}%",
               delta='TRADE' if sig['ref_trade'] else 'below gate (20%) - no trade',
               delta_color='normal' if sig['ref_trade'] else 'off',
