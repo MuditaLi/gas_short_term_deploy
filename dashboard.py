@@ -252,9 +252,9 @@ sig = None
 try:
     sig = load_latest_signal()
     if sig['pred'] > 0:
-        direction, legs = '\U0001F7E2 LONG spread', 'long DA / short M1'
+        direction, legs = '▲ LONG spread', 'long DA / short M1'
     else:
-        direction, legs = '\U0001F534 SHORT spread', 'short DA / long M1'
+        direction, legs = '▼ SHORT spread', 'short DA / long M1'
     s1, s_px, s2, s3 = st.columns([1.3, 1.5, 1.6, 1.3])
     s1.metric('Issued', str(sig['issued']),
               help=f"trade day {sig['date']:%Y-%m-%d}")
