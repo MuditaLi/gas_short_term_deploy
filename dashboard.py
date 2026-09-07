@@ -269,8 +269,11 @@ try:
     with s2.container(key='pred_tile'):
         st.metric('Prediction', direction, delta=legs, delta_color='off',
                   help='model direction for the DA-M1 spread from entry to the 17:00-17:30 close')
-    st.markdown(f"<style>.st-key-pred_tile [data-testid='stMetricValue'] "
-                f"{{ color: {color}; }}</style>", unsafe_allow_html=True)
+    # the value text sits in a nested element with its own colour, so the rule
+    # has to reach every descendant and override it
+    st.markdown(f"<style>.st-key-pred_tile [data-testid='stMetricValue'], "
+                f".st-key-pred_tile [data-testid='stMetricValue'] * "
+                f"{{ color: {color} !important; }}</style>", unsafe_allow_html=True)
     s3.metric('Confidence', f"{sig['confidence'] * 200:.0f}%",
               delta='TRADE' if sig['ref_trade'] else 'below gate (20%) - no trade',
               delta_color='normal' if sig['ref_trade'] else 'off',
