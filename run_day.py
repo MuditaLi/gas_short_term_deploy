@@ -6,6 +6,8 @@ Stages
     signal        DA_M1\\3-spread_forecast.py --da/--m1, then publish   (the 09:00-09:30 prices)
     backfill      DA_M1\\3-spread_forecast.py --asof <day>, then publish
     publish       copy validated outputs into data\\ and push to GitHub
+                  (also exports the DA/M1 close history and the S&D context:
+                  LNG shock alerts + LDZ under both weather models)
     check-signal  notify if today's signal is still missing
 
 Why it is built this way
@@ -46,7 +48,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from notify import notify
+
+def notify(title: str, body: str) -> None:
+    """Failure notice: printed, and the stage exits non-zero so the scheduler
+    (Databricks job) sees it. The old Windows desktop toast is gone."""
+    print(f"[notify] {title}: {body}", flush=True)
+
 
 REPO   = Path(__file__).resolve().parent
 GITHUB = Path(os.environ.get('GAS_GITHUB_ROOT') or REPO.parent)
@@ -208,10 +215,8 @@ class FlowStep(Step):
 class PriceStep(Step):
     """Refreshes DA.csv/M1.csv so the published price history is current.
 
-    The signal and backfill stages refresh prices as a side effect, but the
-    hosted dashboard's calculator needs the close-spread history to be today's
-    even on a morning-only run - otherwise it would compute gap/vol from one
-    day less history than the desk machine and quietly disagree.
+    The signal and backfill stages refresh prices as a side effect; this keeps
+    the published price_history.csv current on a morning-only run too.
     """
     def is_fresh(self):
         return all(written_today(DAM1 / 'inputs' / f) for f in ('DA.csv', 'M1.csv'))
@@ -233,10 +238,15 @@ def load_status() -> dict:
 
 
 def save_status(**patch):
-    """Merge into status.json so stages not run now keep their last result."""
+    """Merge into status.json so stages not run now keep their last result.
+
+    Only 'stages' is merged: publish always enumerates every file, so 'files'
+    is replaced wholesale - otherwise a file that stops being published (e.g.
+    the retired spread_spec.json) would linger in the status forever.
+    """
     st = load_status()
     for key, value in patch.items():
-        if key in ('stages', 'files') and isinstance(value, dict):
+        if key == 'stages' and isinstance(value, dict):
             st.setdefault(key, {}).update(value)
         else:
             st[key] = value
@@ -282,17 +292,13 @@ def dedup_signal_log(path: Path) -> int:
     return dropped
 
 
-SPEC_KEYS = ('GAP_W', 'VOL_W', 'CONF_REF', 'CONF_PLT', 'TC', 'VOL_FLOOR')
 PRICE_HISTORY_DAYS = 200          # comfortably covers the 21d vol window
 
 
 def export_model_inputs() -> dict:
-    """Publish what the hosted dashboard needs to price an entry itself.
+    """Publish the DA/M1 close history (the model's price input) into data\\.
 
-    The spec constants are read out of 3-spread_forecast.py rather than copied,
-    so a change there cannot leave the hosted calculator on a stale spec.
-    Best-effort: if either export fails the calculator simply stays hidden,
-    which must never block publishing the forecasts.
+    Best-effort: a failure here must never block publishing the forecasts.
     """
     info = {}
 
@@ -315,23 +321,87 @@ def export_model_inputs() -> dict:
         info['price_history.csv'] = {'published': False, 'reason': str(exc)}
         say(f'  price_history.csv skipped - {exc}')
 
-    # frozen spec, read from the script that owns it (its own venv, so the
-    # module's imports resolve)
+    return info
+
+
+# S&D pipeline terminal / country codes -> dashboard country
+SND_COUNTRY = {'DE': 'DE', 'NL': 'NL', 'GB': 'UK'}          # regas terminals (CE codes)
+LDZ_COUNTRY = {'de': 'DE', 'nl': 'NL', 'uk': 'UK'}          # ldz model codes
+LDZ_MODELS  = ('ecop', 'gfsop')
+
+
+def export_snd_context() -> dict:
+    """Publish the S&D pipeline's per-component context behind the assembled tables.
+
+    Two things the pipeline computes (regas_fcst.py / ldz_dmd_fcst.py) that the
+    assembled snd_*.csv cannot carry:
+
+    * regas_lng_alerts.csv - the LNG shock check: for the newest run, every
+      DE/NL/GB day where arrivals-implied send-out was compared with the recent-
+      level anchor (lng_divergence), and whether it tripped the calibrated
+      threshold (alert = lng_adjust present). The forecast itself is NOT
+      adjusted by the pipeline; the alert marks those days as low-confidence.
+      When Kpler was unreachable the newest run has no divergence rows and the
+      file is written empty, so the dashboard can say the check did not run.
+    * ldz_models.csv - LDZ demand under both weather models (ecop, the one the
+      S&D tables use, and gfsop), so the dashboard can show how much of the
+      balance hangs on the weather model.
+
+    Best-effort like export_model_inputs(): a failure hides the panel, never
+    blocks the forecasts.
+    """
+    info = {}
+
     try:
-        code = ('import json, importlib.util as u;'
-                "s = u.spec_from_file_location('m', '3-spread_forecast.py');"
-                'm = u.module_from_spec(s); s.loader.exec_module(m);'
-                f'print(json.dumps({{k: getattr(m, k) for k in {SPEC_KEYS!r}}}))')
-        done = subprocess.run([python_for(DAM1), '-c', code], cwd=str(DAM1),
-                              capture_output=True, text=True, timeout=120)
-        spec = json.loads(done.stdout.strip().splitlines()[-1])
-        (DATA / 'spread_spec.json').write_text(json.dumps(spec, indent=2), encoding='utf-8')
-        info['spread_spec.json'] = {'source': 'DA_M1', 'published': True,
-                                    'built': f'{datetime.now():%Y-%m-%d %H:%M}'}
-        say(f"  spread_spec.json -> data\\  (gap {spec['GAP_W']}d / vol {spec['VOL_W']}d)")
+        log = pd.read_csv(SND / 'outputs' / 'regas_forecast_log.csv',
+                          parse_dates=['run_date', 'target_date'])
+        run = log['run_date'].max()
+        rows = log[(log['run_date'] == run) & log['terminal'].isin(SND_COUNTRY)].copy()
+        if 'lng_divergence' not in rows.columns:
+            rows['lng_divergence'] = pd.NA
+        if 'lng_adjust' not in rows.columns:
+            rows['lng_adjust'] = pd.NA
+        rows = rows[rows['lng_divergence'].notna()]
+        out = pd.DataFrame({
+            'run_date': rows['run_date'].dt.strftime('%Y-%m-%d'),
+            'country': rows['terminal'].map(SND_COUNTRY),
+            'date': rows['target_date'].dt.strftime('%Y-%m-%d'),
+            'regas_forecast': rows['regas_forecast'],
+            'lng_divergence': rows['lng_divergence'],
+            'lng_adjust': rows['lng_adjust'],
+            'alert': rows['lng_adjust'].notna(),
+        }).sort_values(['country', 'date'])
+        out.to_csv(DATA / 'regas_lng_alerts.csv', index=False)
+        n_alert = int(out['alert'].sum())
+        info['regas_lng_alerts.csv'] = {
+            'source': 'daily_storage_forecast', 'published': True,
+            'data_through': f'{run:%Y-%m-%d}',
+            'built': f'{datetime.now():%Y-%m-%d %H:%M}',
+            'reason': ('LNG check did not run (no divergence rows - Kpler unreachable?)'
+                       if out.empty else f'{n_alert} alert day(s)'),
+        }
+        say(f"  regas_lng_alerts.csv -> data\\  (run {run:%Y-%m-%d}, "
+            f"{len(out)} checked day(s), {n_alert} alert(s))")
     except Exception as exc:
-        info['spread_spec.json'] = {'published': False, 'reason': str(exc)}
-        say(f'  spread_spec.json skipped - {exc}')
+        info['regas_lng_alerts.csv'] = {'published': False, 'reason': str(exc)}
+        say(f'  regas_lng_alerts.csv skipped - {exc}')
+
+    try:
+        ldz = pd.read_csv(SND / 'outputs' / 'ldz_demand_forecast.csv', parse_dates=['date'])
+        ldz = ldz[ldz['country'].isin(LDZ_COUNTRY) & ldz['model'].isin(LDZ_MODELS)]
+        wide = ldz.pivot_table(index='date', columns=['country', 'model'], values='ldz_mcm')
+        wide.columns = [f'{LDZ_COUNTRY[c]}_{m}' for c, m in wide.columns]
+        wide = wide.sort_index().round(2)
+        wide.to_csv(DATA / 'ldz_models.csv', index_label='date')
+        info['ldz_models.csv'] = {
+            'source': 'daily_storage_forecast', 'published': True,
+            'data_through': f'{wide.index.max():%Y-%m-%d}',
+            'built': f'{datetime.now():%Y-%m-%d %H:%M}',
+        }
+        say(f'  ldz_models.csv -> data\\  (ecop + gfsop through {wide.index.max():%Y-%m-%d})')
+    except Exception as exc:
+        info['ldz_models.csv'] = {'published': False, 'reason': str(exc)}
+        say(f'  ldz_models.csv skipped - {exc}')
 
     return info
 
@@ -394,6 +464,7 @@ def publish(allow_stale=False, push=True) -> bool:
         files[name] = info
 
     files.update(export_model_inputs())
+    files.update(export_snd_context())
 
     # signal freshness is reported, never gated: the morning publish runs
     # hours before the 09:30 signal exists

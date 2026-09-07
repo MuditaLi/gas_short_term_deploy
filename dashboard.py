@@ -1,24 +1,21 @@
 """
 Gas Short-Term Outlook & Signals dashboard (DE / NL / UK).
 
-Self-contained deploy version: reads everything from the repo-local data/
-folder (populated by run_day.py from the two pipelines). Suitable for
+Self-contained, read-only deploy version: reads everything from the repo-local
+data/ folder (populated by run_day.py, which the scheduler runs). Suitable for
 Streamlit Community Cloud or any host with just this repo checked out.
 
-On the host that has the pipelines checked out beside this repo, the page also
-drives them: the 09:00-09:30 prices are typed in here (Trayport embargoes
-intraday data for 24h, so they cannot be fetched) and run_day.py runs the
-signal and publishes. On a cloud host those controls are hidden and the page
-is read-only.
+Per country it shows the assembled S&D table plus two pieces of context the
+S&D pipeline computes behind it: the regas step's LNG shock check (Kpler
+arrivals vs the recent-level anchor - alert-only, the forecast is not
+adjusted) and LDZ demand under the second weather model (gfsop; the tables
+use ecop), drawn as an alternative balance line.
 
 Run:
     streamlit run dashboard.py
 """
 import json
 import math
-import os
-import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -28,14 +25,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))       # import works whatever cwd the host launches from
-import signal_model                 # noqa: E402
-
 DATA = HERE / 'data'
-
-# pipelines reachable = we are on the host that can run them
-GITHUB = Path(os.environ.get('GAS_GITHUB_ROOT') or HERE.parent)
-LOCAL = (GITHUB / 'quant_strats' / 'DA_M1').exists()
 
 COUNTRIES = {'DE': 'snd_de.csv', 'NL': 'snd_nl.csv', 'UK': 'snd_uk.csv'}
 DEMAND_COMPONENTS = ['GFP', 'LDZ', 'Industry']          # kept if present per country
@@ -67,6 +57,38 @@ def load_csv(fname: str) -> pd.DataFrame:
     lo = today_ts() - pd.Timedelta(days=HISTORY_DAYS)
     hi = today_ts() + pd.Timedelta(days=FORECAST_DAYS)
     return df[(df.index >= lo) & (df.index <= hi)]
+
+
+@st.cache_data(ttl=600)
+def load_lng_alerts():
+    """LNG shock check per country/day from the S&D regas step, or None.
+
+    The pipeline compares Kpler cargo arrivals (through a calibrated release
+    kernel) with its recent-level regas anchor; a day whose divergence trips the
+    threshold is flagged (alert=True, lng_adjust = the nudge it would have
+    applied). The regas forecast itself is deliberately NOT adjusted - the flag
+    marks the day as low-confidence. An empty file means the check did not run
+    (Kpler unreachable) for the newest forecast.
+    """
+    try:
+        return pd.read_csv(DATA / 'regas_lng_alerts.csv', parse_dates=['date'])
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=600)
+def load_ldz_models():
+    """LDZ demand under both weather models (columns like DE_ecop, DE_gfsop), or None.
+
+    The S&D tables use ecop; the gfsop column shows how much of the balance
+    hangs on the weather model."""
+    try:
+        df = pd.read_csv(DATA / 'ldz_models.csv', parse_dates=['date']).set_index('date').round(1)
+        lo = today_ts() - pd.Timedelta(days=HISTORY_DAYS)
+        hi = today_ts() + pd.Timedelta(days=FORECAST_DAYS)
+        return df[(df.index >= lo) & (df.index <= hi)]
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=120)
@@ -113,17 +135,6 @@ def _read_stamp():
         return None
 
 
-def run_stage(stage_args: list, message: str) -> None:
-    """Run run_day.py and stash the result for display after the rerun."""
-    with st.spinner(message):
-        done = subprocess.run([sys.executable, str(HERE / 'run_day.py'), *stage_args],
-                              cwd=str(HERE), capture_output=True, text=True,
-                              encoding='utf-8', errors='replace')
-    st.session_state['run_output'] = (done.returncode,
-                                      (done.stdout or '') + (done.stderr or ''))
-    st.cache_data.clear()
-
-
 def mark_tomorrow(fig: go.Figure, index: pd.DatetimeIndex) -> None:
     """Shaded band + label on tomorrow (the DA delivery day), if in range."""
     tmr = today_ts() + pd.Timedelta(days=1)
@@ -133,8 +144,12 @@ def mark_tomorrow(fig: go.Figure, index: pd.DatetimeIndex) -> None:
                       annotation_text='tomorrow', annotation_position='top left')
 
 
-def snd_figure(df: pd.DataFrame, country: str) -> go.Figure:
-    """Stacked supply (positive) vs demand (negative) bars + balance line."""
+def snd_figure(df: pd.DataFrame, country: str, alt_balance=None, lng_alert_days=()) -> go.Figure:
+    """Stacked supply (positive) vs demand (negative) bars + balance line.
+
+    alt_balance: the balance with LDZ from the other weather model (dashed).
+    lng_alert_days: dates the regas LNG shock check flagged (marked above the bars).
+    """
     fig = go.Figure()
     for col in SUPPLY_COMPONENTS:
         if col in df.columns:
@@ -146,8 +161,17 @@ def snd_figure(df: pd.DataFrame, country: str) -> go.Figure:
                         marker_color=DEMAND_COLORS.get(col), opacity=0.85)
     fig.add_scatter(x=df.index, y=df['Balance'], name='Balance (net injection)',
                     mode='lines+markers', line=dict(color='black', width=3))
+    if alt_balance is not None:
+        fig.add_scatter(x=alt_balance.index, y=alt_balance, name='Balance with gfsop LDZ',
+                        mode='lines', line=dict(color='#7f7f7f', width=2, dash='dash'))
     fig.add_hline(y=0, line_width=1, line_color='grey')
     mark_tomorrow(fig, df.index)
+    top = df['Supply'].max()
+    for day in lng_alert_days:
+        if day in df.index:
+            fig.add_annotation(x=day, y=top, text='LNG &#9888;', showarrow=False,
+                               yshift=14, font=dict(color='#b8860b', size=12),
+                               hovertext='regas: LNG shock alert (low confidence)')
     fig.update_layout(
         barmode='relative',
         title=f'{country} — supply (up) vs demand (down), mcm/d',
@@ -246,106 +270,6 @@ try:
 except Exception as e:
     st.warning(f'spread signal unavailable: {e}')
 
-# ── run controls (host with the pipelines only) ──────────────────────────────
-if LOCAL:
-    have_today = sig is not None and sig['date'].date() == datetime.today().date()
-    with st.expander("Enter the 09:00-09:30 prices / run the pipelines",
-                     expanded=not have_today):
-        st.caption('Trayport embargoes intraday data for 24h, so today\'s entry '
-                   'prices are the one input that cannot be fetched — read them '
-                   'off the screen after 09:30.')
-        with st.form('signal_form'):
-            f1, f2, f3 = st.columns([2, 2, 3])
-            da_in = f1.text_input('DA 09:00-09:30 vwap', placeholder='60.42')
-            m1_in = f2.text_input('M1 09:00-09:30 vwap', placeholder='60.66')
-            f3.write('')
-            submitted = f3.form_submit_button('Run signal + publish', type='primary')
-        if submitted:
-            try:
-                da_v = float(da_in.strip().replace(',', '.'))
-                m1_v = float(m1_in.strip().replace(',', '.'))
-            except ValueError:
-                st.error('enter both prices as numbers')
-            else:
-                run_stage(['signal', '--da', str(da_v), '--m1', str(m1_v)],
-                          'running the spread signal + publishing...')
-                st.rerun()
-
-        b1, b2, _ = st.columns([2, 2, 3])
-        if b1.button('Run morning update', help='S&D + flow forecast, then publish — '
-                                                'takes ~20 min, keep this tab open'):
-            run_stage(['morning'], 'running the morning update (~20 min)...')
-            st.rerun()
-        if b2.button('Publish only', help='re-copy validated outputs into data\\ and push'):
-            run_stage(['publish'], 'publishing...')
-            st.rerun()
-
-        if 'run_output' in st.session_state:
-            code, output = st.session_state['run_output']
-            (st.success if code == 0 else st.error)(f'last run finished with exit {code}')
-            st.code(output[-6000:] or '(no output)')
-
-# ── hosted: price the entry without the pipelines ────────────────────────────
-elif signal_model.available(DATA):
-    have_today = sig is not None and sig['date'].date() == datetime.today().date()
-    with st.expander('Enter the 09:00-09:30 prices', expanded=not have_today):
-        st.caption('This page cannot reach the pipelines, so it applies the '
-                   'published model to the prices you enter. The result is shown '
-                   'here only — the recorded signal is the one the desk machine '
-                   'writes to the log.')
-        with st.form('hosted_signal_form'):
-            g1, g2, g3 = st.columns([2, 2, 3])
-            da_in = g1.text_input('DA 09:00-09:30 vwap', placeholder='60.42')
-            m1_in = g2.text_input('M1 09:00-09:30 vwap', placeholder='60.66')
-            g3.write('')
-            priced = g3.form_submit_button('Price this entry', type='primary')
-
-        if priced:
-            try:
-                out = signal_model.evaluate(DATA,
-                                            float(da_in.strip().replace(',', '.')),
-                                            float(m1_in.strip().replace(',', '.')))
-            except ValueError as exc:
-                st.error(f'cannot price this entry: {exc}')
-            else:
-                spec = out['spec']
-                arrow = '&#9650;' if out['pred'] > 0 else '&#9660;'
-                colour = '#09ab3b' if out['pred'] > 0 else '#ff2b2b'
-                side = ('LONG spread (long DA / short M1)' if out['pred'] > 0
-                        else 'SHORT spread (short DA / long M1)')
-                st.markdown(f"### <span style='color:{colour}'>{arrow}</span> {side}",
-                            unsafe_allow_html=True)
-                h1, h2, h3 = st.columns(3)
-                h1.metric('Confidence', f"{out['confidence'] * 200:.0f}%",
-                          delta='TRADE' if out['ref_trade'] else
-                                f"below gate ({spec['CONF_REF'] * 200:.0f}%) - no trade",
-                          delta_color='normal' if out['ref_trade'] else 'off')
-                h2.metric('p_up', f"{out['p_up']:.3f}")
-                h3.metric('PILOT gate', 'TRADE' if out['pilot_trade'] else 'no trade',
-                          help=f"needs confidence > {spec['CONF_PLT'] * 200:.0f}% "
-                               f"and vol21 > {spec['VOL_FLOOR']:.3f}")
-                st.caption(
-                    f"open_spread {out['open_spread']:+.3f} · stor_D1 {out['stor_D1']:+.2f} · "
-                    f"gap_vol {out['gap_vol']:+.3f} · gap_morning {out['gap_morning']:+.3f} · "
-                    f"vol21 {out['vol21']:.3f} · last close {out['last_close_day']:%Y-%m-%d}")
-
-                stale = (pd.Timestamp(datetime.today().date()) - out['last_close_day']).days
-                if stale > 4:
-                    st.warning(f"the newest published close is {stale} days old — "
-                               f"gap_vol is computed from stale history")
-
-        # end-to-end check that this page still agrees with the pipeline
-        check = signal_model.verify_against_log(DATA)
-        if check and not check['ok']:
-            st.error(f"this calculator disagrees with the pipeline — do not trust "
-                     f"it until the published model is refreshed ({check['detail']})")
-        elif check:
-            st.caption(f"self-check: {check['detail']}")
-            if check['moved']:
-                st.caption('inputs have been refreshed since that signal was '
-                           'issued, so a re-price now differs: '
-                           + '; '.join(check['moved']))
-
 # ── overview: balance per country, S&D pipeline vs DA_M1 flow model ─────────
 st.subheader('Storage balance by country (mcm/d)')
 
@@ -374,6 +298,8 @@ with right:
         st.warning('model forecast unavailable')
 
 # ── per-country sections (all visible, no tabs) ──────────────────────────────
+lng_alerts = load_lng_alerts()
+ldz_models = load_ldz_models()
 for country, fname in COUNTRIES.items():
     st.divider()
     st.header(country)
@@ -392,5 +318,38 @@ for country, fname in COUNTRIES.items():
               delta=f"{row['Balance'] - prev['Balance']:+.0f}",
               help='Supply - Demand = implied net storage injection')
 
-    st.plotly_chart(snd_figure(df, country), use_container_width=True)
-    st.dataframe(snd_table(df), use_container_width=True)
+    # LDZ under the other weather model: the S&D tables use ecop, so the gfsop
+    # column shows how much of the balance hangs on the weather model
+    table_df, alt_balance = df, None
+    if ldz_models is not None and {f'{country}_ecop', f'{country}_gfsop'} <= set(ldz_models.columns):
+        shift = (ldz_models[f'{country}_gfsop'] - ldz_models[f'{country}_ecop']).reindex(df.index)
+        alt_balance = (df['Balance'] - shift).dropna().round(1)
+        table_df = df.copy()
+        table_df['LDZ (gfsop)'] = ldz_models[f'{country}_gfsop'].reindex(df.index)
+        table_df['Balance with gfsop LDZ'] = alt_balance
+        tmr = today_ts() + pd.Timedelta(days=1)
+        if tmr in shift.index and pd.notna(shift[tmr]) and abs(shift[tmr]) >= 1:
+            st.caption(f"weather-model spread: gfsop puts LDZ {shift[tmr]:+.1f} mcm/d vs ecop "
+                       f"tomorrow, i.e. balance {-shift[tmr]:+.1f} mcm/d")
+
+    # LNG shock check from the regas step (alert-only: the forecast is not adjusted)
+    alert_days = ()
+    if lng_alerts is not None:
+        chk = lng_alerts[(lng_alerts['country'] == country) & lng_alerts['date'].isin(df.index)]
+        fired = chk[chk['alert']]
+        if fired.empty and chk.empty:
+            st.caption('LNG arrivals check did not run for this forecast (Kpler unreachable) — '
+                       'regas is the recent-level model alone')
+        elif fired.empty:
+            st.caption(f"LNG arrivals check: no shock flagged "
+                       f"(max divergence {chk['lng_divergence'].abs().max():.1f} mcm/d)")
+        else:
+            alert_days = tuple(fired['date'])
+            days = '; '.join(f"{d:%a %d %b} ({v:+.1f} mcm/d, would-be nudge {a:+.1f})"
+                             for d, v, a in zip(fired['date'], fired['lng_divergence'], fired['lng_adjust']))
+            st.warning(f"LNG shock alert — cargo arrivals imply regas send-out well away from the "
+                       f"recent-level anchor on {days}. The regas forecast is NOT adjusted; "
+                       f"treat these days as low-confidence.")
+
+    st.plotly_chart(snd_figure(df, country, alt_balance, alert_days), use_container_width=True)
+    st.dataframe(snd_table(table_df), use_container_width=True)

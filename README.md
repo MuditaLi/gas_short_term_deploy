@@ -11,37 +11,35 @@ hosted dashboard, only by the publishing machine):
 - `daily_storage_forecast\` — S&D pipeline (`main.py`)
 - `quant_strats\DA_M1\` — flow-model forecast (script 2) + spread signal (script 3)
 
-## Running it (publishing machine)
+## Running it (scheduler host, e.g. Databricks)
 
-Everything goes through one entry point, `run_day.py` (`run_day.ps1` is the
-launcher Task Scheduler calls):
+Everything goes through one entry point, `run_day.py`; each stage is one
+scheduled job:
 
 | stage | what it does | when |
 |---|---|---|
-| `morning` | S&D pipeline + DA_M1 flow forecast, then publish | daily 07:45 (scheduled) |
-| `signal` | spread signal from the 09:00-09:30 prices, then publish | after 09:30, from the dashboard |
-| `backfill` | recomputes yesterday's signal from its *true* 09:00-09:30 vwap | daily 10:15 (scheduled) |
+| `morning` | S&D pipeline + DA_M1 flow forecast, then publish | daily 07:45 |
+| `signal` | spread signal from the 09:00-09:30 prices, then publish | after 09:30 |
+| `backfill` | recomputes yesterday's signal from its *true* 09:00-09:30 vwap | daily 10:15 (not before 10:00 — Trayport embargo) |
 | `publish` | validates and copies outputs into `data\`, commits, pushes | inside every stage; rarely needed alone |
-| `check-signal` | desktop notification if today's signal is still missing | daily 09:35 (scheduled) |
+| `check-signal` | exits non-zero if today's signal is still missing | daily 09:35 |
 
-```powershell
-.\run_day.ps1 morning              # or: Start-ScheduledTask GasShortTerm_Morning
-.\run_day.ps1 signal --da 60.42 --m1 60.66
-.\run_day.ps1 backfill --asof 2026-08-13
+```
+python run_day.py morning
+python run_day.py signal --da 60.42 --m1 60.66
+python run_day.py backfill --asof 2026-08-13
 ```
 
 Switches: `--force` (rerun steps whose outputs are already fresh), `--no-push`
 (publish to `data\` without pushing), `--allow-stale` (publish files that fail
 their freshness check — escape hatch, normally leave alone).
-
-Other scripts: `run_dashboard.ps1` serves the dashboard at
-http://localhost:8501; `schedule_tasks.ps1` registers the scheduled tasks (run
-once, as Administrator). `update_data.ps1`, `spread_signal.ps1` and
-`publish_data.ps1` still work — they are thin wrappers around the stages above.
+`streamlit run dashboard.py` serves the page locally.
 
 Repo root is derived from this folder's location (standard sibling layout);
-override with the `GAS_GITHUB_ROOT` environment variable. `GAS_PYTHON` pins the
-interpreter; each pipeline uses its own `.venv` automatically when it has one.
+override with the `GAS_GITHUB_ROOT` environment variable. Each pipeline uses
+its own `.venv` automatically when it has one, else the current interpreter.
+Publish commits `data/` and runs `git push`, so the host needs a git credential
+for this repo.
 
 ### What the runner guarantees
 
@@ -57,8 +55,8 @@ interpreter; each pipeline uses its own `.venv` automatically when it has one.
 - **Reruns are cheap.** A step whose outputs are already fresh is skipped, so
   recovering from a mid-morning failure does not repeat the ~20 min MetDesk
   fetch.
-- **Failures notify** (desktop toast, falling back to `msg`), instead of only
-  appearing in `logs\`.
+- **Failures are loud.** A failed stage prints a `[notify]` line and exits
+  non-zero, so the scheduler flags the run; `logs\` keeps the full output.
 
 ## Hosted dashboard (Streamlit Community Cloud)
 
@@ -66,31 +64,32 @@ interpreter; each pipeline uses its own `.venv` automatically when it has one.
 2. share.streamlit.io -> New app -> pick this repo, `dashboard.py`, branch master.
 3. Done — every publish pushes and updates the hosted app automatically.
 
-What the page offers depends on where it runs:
+The page is read-only: forecasts, the latest logged signal and the pipeline
+status. It never runs anything; the scheduler does, through `run_day.py`.
+Publish also exports `price_history.csv` (DA/M1 17:00-17:30 close VWAPs, the
+model's price input) and `spread_model_params.csv` into `data/`.
 
-| | local (pipelines beside this repo) | hosted |
-|---|---|---|
-| view forecasts + latest signal | yes | yes |
-| enter the 09:00-09:30 prices | yes — **runs the real signal and logs it** | yes — prices the entry, result shown but **not logged** |
-| run morning update / publish | yes | no, and never can |
+Publish also exports two pieces of S&D context that the assembled tables
+cannot carry (best-effort, never blocks the forecasts):
 
-The hosted page cannot reach Trayport, CE or the pipeline checkouts, so it
-applies the published model (`signal_model.py`) to the prices you type. To make
-that possible, publish also exports `price_history.csv`,
-`spread_model_params.csv` and `spread_spec.json` into `data/`. The spec
-constants are read out of `3-spread_forecast.py` at publish time rather than
-copied, and the page re-derives the newest logged signal on every load — if it
-cannot reproduce it, it says so in red instead of showing a number you might
-trust. The tradeable record always comes from the desk machine.
+- `regas_lng_alerts.csv` — the regas step's LNG shock check (Kpler cargo
+  arrivals through the calibrated release kernel vs the recent-level anchor)
+  for DE/NL/UK, newest run only. `alert=True` days are shown as a warning and
+  an `LNG ⚠` mark on the country chart; the regas forecast itself is **not**
+  adjusted by the pipeline (alert-only by design). An empty file means the
+  check did not run (Kpler unreachable) and the page says so.
+- `ldz_models.csv` — LDZ demand under both weather models. The S&D tables use
+  ecop; the page adds `LDZ (gfsop)` and `Balance with gfsop LDZ` rows and a
+  dashed alternative balance line, so the weather-model dependence is visible.
 
 ## Morning routine
 
 1. 07:45 — S&D + flow forecast run and publish by themselves. Nothing to do
-   unless a toast says otherwise; the dashboard shows the per-stage status.
-2. After 09:30 — open the dashboard and type the two 09:00-09:30 prices into
-   the form at the top. That runs the signal and publishes in one go. (A toast
-   at 09:35 reminds you if it is still outstanding; `spread_signal.ps1` does the
-   same thing from a terminal.)
+   unless the job fails; the dashboard shows the per-stage status.
+2. After 09:30 — the `signal` job runs `run_day.py signal --da … --m1 …` with
+   the two 09:00-09:30 VWAPs and publishes. The 09:35 `check-signal` job fails
+   if the signal is still outstanding. (Automating the price fetch lives in
+   `quant_strats\DA_M1\3-spread_forecast.py`, not here — see its docstring.)
 3. 10:15 — yesterday's signal is recomputed from its true 09:00-09:30 vwap into
    `spread_signal_backfill.csv`, with no action from you.
 

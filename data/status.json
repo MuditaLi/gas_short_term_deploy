@@ -52,12 +52,20 @@
       "source": "DA_M1",
       "published": true,
       "data_through": "2026-09-04",
-      "built": "2026-09-07 12:49"
+      "built": "2026-09-07 16:07"
     },
-    "spread_spec.json": {
-      "source": "DA_M1",
+    "regas_lng_alerts.csv": {
+      "source": "daily_storage_forecast",
       "published": true,
-      "built": "2026-09-07 12:49"
+      "data_through": "2026-09-07",
+      "built": "2026-09-07 16:07",
+      "reason": "LNG check did not run (no divergence rows - Kpler unreachable?)"
+    },
+    "ldz_models.csv": {
+      "source": "daily_storage_forecast",
+      "published": true,
+      "data_through": "2026-09-13",
+      "built": "2026-09-07 16:07"
     }
   },
   "blocked": [],
@@ -66,13 +74,13 @@
     "issued": "2026-09-07 12:49",
     "is_today": true
   },
-  "updated": "2026-09-07 12:49:55",
+  "updated": "2026-09-07 16:07:02",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-09-07 12:49"
+      "finished": "2026-09-07 16:07"
     },
     "snd": {
       "status": "ok",
@@ -100,5 +108,5 @@
       "finished": "2026-09-07 10:47"
     }
   },
-  "updated_epoch": 1788778195
+  "updated_epoch": 1788790023
 }
