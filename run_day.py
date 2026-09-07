@@ -3,7 +3,9 @@ Gas Short-Term Outlook & Signals - daily runner (single entry point).
 
 Stages
     morning       daily_storage_forecast\\main.py  +  DA_M1\\2-storage_flow_forecast.py, then publish
-    signal        DA_M1\\3-spread_forecast.py --da/--m1, then publish   (the 09:00-09:30 prices)
+    signal        DA_M1\\3-spread_forecast.py --da/--m1, then publish
+                  (prices default to the 09:00-10:00 window averages that
+                  fetch_vwap.py builds from the desk snapshot files)
     backfill      DA_M1\\3-spread_forecast.py --asof <day>, then publish
     publish       copy validated outputs into data\\ and push to GitHub
                   (also exports the DA/M1 close history and the S&D context:
@@ -26,7 +28,8 @@ Why it is built this way
 
 Usage
     python run_day.py morning
-    python run_day.py signal --da 60.42 --m1 60.66
+    python run_day.py signal                    # after 10:00 Amsterdam, prices auto-fetched
+    python run_day.py signal --da 60.42 --m1 60.66      # manual override
     python run_day.py backfill                  # yesterday (or --asof 2026-08-13)
     python run_day.py publish
     python run_day.py check-signal
@@ -466,6 +469,17 @@ def publish(allow_stale=False, push=True) -> bool:
     files.update(export_model_inputs())
     files.update(export_snd_context())
 
+    # entry-price window averages, written straight into data\ by fetch_vwap.py
+    # (desk machine only); reported so the dashboard's file table shows them
+    wp = DATA / WINDOW_FILE
+    if wp.exists():
+        last = latest_date(wp)
+        files[WINDOW_FILE] = {
+            'source': 'desk snapshots', 'published': True,
+            'data_through': None if last is None else f'{last:%Y-%m-%d}',
+            'built': f'{datetime.fromtimestamp(wp.stat().st_mtime):%Y-%m-%d %H:%M}',
+        }
+
     # signal freshness is reported, never gated: the morning publish runs
     # hours before the 09:30 signal exists
     sig = {}
@@ -545,10 +559,72 @@ def stage_morning(force=False, push=True, allow_stale=False) -> bool:
     return ok_snd and ok_flow and ok_px and ok_pub
 
 
+WINDOW_FILE = 'am_window_prices.csv'     # written by fetch_vwap.py into data\
+
+
+def window_prices_today():
+    """Today's DA / M1 entry prices from the desk snapshot files.
+
+    Runs fetch_vwap.window_prices() for today (09:00-10:00 Amsterdam mid-quote
+    averages) and merges the row into data\\am_window_prices.csv. When the
+    snapshot drive is not reachable from this host, falls back to the row
+    already in that CSV. Returns (da, m1, detail) or (None, None, reason).
+
+    Refuses a still-open window: a run before 10:00 would sign the day on a
+    partial average and the log keeps it as what was tradeable.
+    """
+    try:
+        import fetch_vwap as fv
+    except Exception as exc:
+        return None, None, f'fetch_vwap import failed: {exc}'
+
+    day = today()
+    if os.path.isdir(fv.ROOT):
+        try:
+            row = fv.window_prices(day, verbose=False)
+        except Exception as exc:
+            return None, None, f'snapshot scan failed: {exc}'
+        if row['partial']:
+            return None, None, (f"window {row['window']} still open - run after "
+                                f"{fv.WINDOW_END} {fv.TZ} or pass --da/--m1")
+        if row['da_bars'] == 0 or row['m1_bars'] == 0:
+            return None, None, (f"no two-sided quotes today (DA {row['da_bars']} bars, "
+                                f"M1 {row['m1_bars']} bars)")
+        fv.save_history(pd.DataFrame([dict(date=row['date'], da_vwap=row['da_px'],
+                                           m1_vwap=row['m1_px'])]))
+        detail = (f"snapshots {row['window']}: DA {row['da_px']:.3f} ({row['da_bars']} bars, "
+                  f"spread {row['da_spread']:.3f}), M1 {row['m1_contract']} {row['m1_px']:.3f} "
+                  f"({row['m1_bars']} bars, spread {row['m1_spread']:.3f})")
+        return round(row['da_px'], 3), round(row['m1_px'], 3), detail
+
+    # no drive here: use what a desk run already saved
+    try:
+        hist = pd.read_csv(DATA / WINDOW_FILE, parse_dates=['date']).set_index('date')
+        r = hist.loc[day]
+    except Exception:
+        return None, None, (f'snapshot drive not reachable and no row for {day:%Y-%m-%d} '
+                            f'in data\\{WINDOW_FILE}')
+    if pd.isna(r['da_vwap']) or pd.isna(r['m1_vwap']):
+        return None, None, f'{WINDOW_FILE} row for {day:%Y-%m-%d} has no DA or M1 price'
+    return (round(float(r['da_vwap']), 3), round(float(r['m1_vwap']), 3),
+            f'data\\{WINDOW_FILE} (saved earlier)')
+
+
 def stage_signal(da, m1, push=True, allow_stale=False) -> bool:
     if da is None or m1 is None:
-        say('ERROR: signal needs --da and --m1 (the 09:00-09:30 vwaps)')
-        return False
+        if da is not None or m1 is not None:
+            say('ERROR: pass both --da and --m1, or neither (auto-fetch)')
+            return False
+        da, m1, detail = window_prices_today()
+        if da is None:
+            say(f'ERROR: no entry prices - {detail}')
+            record_stage('signal', False, f'no entry prices: {detail}')
+            notify('Gas spread signal failed', detail)
+            publish(allow_stale=allow_stale, push=push)
+            return False
+        say(f'entry prices from {detail}')
+    else:
+        say('entry prices from --da/--m1 (manual)')
     say(f'\n== DA-M1 spread signal (DA {da} / M1 {m1}) ==')
     rc = run_script(DAM1, '3-spread_forecast.py', ['--da', da, '--m1', m1])
     ok = rc == 0 and covers(DAM1 / 'outputs' / SIGNAL_FILE, today())
@@ -601,8 +677,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('stage', choices=['morning', 'signal', 'backfill', 'publish', 'check-signal'])
-    ap.add_argument('--da', help="today's 09:00-09:30 DA vwap (signal stage)")
-    ap.add_argument('--m1', help="today's 09:00-09:30 M1 vwap (signal stage)")
+    ap.add_argument('--da', help="today's DA entry price (signal stage; default: "
+                                 "09:00-10:00 window from the desk snapshots via fetch_vwap.py)")
+    ap.add_argument('--m1', help="today's M1 entry price (signal stage; default: same)")
     ap.add_argument('--asof', help='day to backfill (default: yesterday)')
     ap.add_argument('--force', action='store_true', help='rerun steps even if outputs are fresh')
     ap.add_argument('--no-push', action='store_true', help='publish to data\\ but do not git push')

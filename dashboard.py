@@ -255,9 +255,15 @@ try:
         tri, color, direction = '&#9650;', '#09ab3b', 'LONG spread (long DA / short M1)'
     else:
         tri, color, direction = '&#9660;', '#ff2b2b', 'SHORT spread (short DA / long M1)'
-    s1, s2, s3 = st.columns(3)
+    s1, s_da, s_m1, s2, s3 = st.columns([1.3, 1, 1, 2, 1.3])
     s1.metric('Issued', str(sig['issued']),
-              help=f"trade day {sig['date']:%Y-%m-%d}, entry 09:00-09:30 vwap")
+              help=f"trade day {sig['date']:%Y-%m-%d}")
+    s_da.metric('DA vwap', f"{sig['da_am']:.3f}",
+                help='Day Ahead entry price: 09:00-10:00 Amsterdam mid-quote average '
+                     'from the desk snapshots (fetch_vwap.py)')
+    s_m1.metric('M1 vwap', f"{sig['m1_am']:.3f}",
+                delta=f"spread {sig['open_spread']:+.3f}", delta_color='off',
+                help='Front-month entry price, same window; delta = DA - M1 entry spread')
     s2.caption('Prediction')
     s2.markdown(f"### <span style='color:{color}'>{tri}</span> {direction}",
                 unsafe_allow_html=True)
