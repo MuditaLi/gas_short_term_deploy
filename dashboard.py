@@ -252,9 +252,9 @@ sig = None
 try:
     sig = load_latest_signal()
     if sig['pred'] > 0:
-        direction, legs = '▲ LONG spread', 'long DA / short M1'
+        direction, legs, color = '▲ LONG spread', 'long DA / short M1', '#09ab3b'
     else:
-        direction, legs = '▼ SHORT spread', 'short DA / long M1'
+        direction, legs, color = '▼ SHORT spread', 'short DA / long M1', '#ff2b2b'
     s1, s_px, s2, s3 = st.columns([1.3, 1.5, 1.6, 1.3])
     s1.metric('Issued', str(sig['issued']),
               help=f"trade day {sig['date']:%Y-%m-%d}")
@@ -263,9 +263,14 @@ try:
                 delta=f"{sig['open_spread']:+.3f} DA-M1", delta_color='off',
                 help='entry prices: 09:00-10:00 Amsterdam mid-quote averages from the '
                      'desk snapshots (fetch_vwap.py); below = entry spread DA minus M1')
-    # a metric like its neighbours, so the value shares their baseline
-    s2.metric('Prediction', direction, delta=legs, delta_color='off',
-              help='model direction for the DA-M1 spread from entry to the 17:00-17:30 close')
+    # a metric like its neighbours, so the value shares their baseline. Metric
+    # values take no colour, so the tile gets a keyed container and a CSS rule
+    # scoped to that key colours just its value green/red.
+    with s2.container(key='pred_tile'):
+        st.metric('Prediction', direction, delta=legs, delta_color='off',
+                  help='model direction for the DA-M1 spread from entry to the 17:00-17:30 close')
+    st.markdown(f"<style>.st-key-pred_tile [data-testid='stMetricValue'] "
+                f"{{ color: {color}; }}</style>", unsafe_allow_html=True)
     s3.metric('Confidence', f"{sig['confidence'] * 200:.0f}%",
               delta='TRADE' if sig['ref_trade'] else 'below gate (20%) - no trade',
               delta_color='normal' if sig['ref_trade'] else 'off',
