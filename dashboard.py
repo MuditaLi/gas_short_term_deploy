@@ -258,14 +258,11 @@ try:
     s1, s_px, s2, s3 = st.columns([1.3, 1.5, 2, 1.3])
     s1.metric('Issued', str(sig['issued']),
               help=f"trade day {sig['date']:%Y-%m-%d}")
-    # the two entry prices share one column, split tight, so they read as a pair
-    s_da, s_m1 = s_px.columns(2, gap='small')
-    s_da.metric('DA vwap', f"{sig['da_am']:.3f}",
-                help='Day Ahead entry price: 09:00-10:00 Amsterdam mid-quote average '
-                     'from the desk snapshots (fetch_vwap.py)')
-    s_m1.metric('M1 vwap', f"{sig['m1_am']:.3f}",
-                delta=f"spread {sig['open_spread']:+.3f}", delta_color='off',
-                help='Front-month entry price, same window; delta = DA - M1 entry spread')
+    # one tile for the pair keeps both prices on the same baseline
+    s_px.metric('DA / M1 vwap', f"{sig['da_am']:.3f} / {sig['m1_am']:.3f}",
+                delta=f"{sig['open_spread']:+.3f} DA-M1", delta_color='off',
+                help='entry prices: 09:00-10:00 Amsterdam mid-quote averages from the '
+                     'desk snapshots (fetch_vwap.py); below = entry spread DA minus M1')
     s2.caption('Prediction')
     s2.markdown(f"### <span style='color:{color}'>{tri}</span> {direction}",
                 unsafe_allow_html=True)
