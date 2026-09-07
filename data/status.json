@@ -2,32 +2,32 @@
   "files": {
     "snd_de.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-08-26",
-      "built": "2026-08-20 09:53",
+      "data_through": "2026-09-13",
+      "built": "2026-09-07 10:19",
       "published": true
     },
     "snd_nl.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-08-26",
-      "built": "2026-08-20 09:53",
+      "data_through": "2026-09-13",
+      "built": "2026-09-07 10:19",
       "published": true
     },
     "snd_uk.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-08-26",
-      "built": "2026-08-20 09:53",
+      "data_through": "2026-09-13",
+      "built": "2026-09-07 10:19",
       "published": true
     },
     "country_balance.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-08-26",
-      "built": "2026-08-20 09:53",
+      "data_through": "2026-09-13",
+      "built": "2026-09-07 10:19",
       "published": true
     },
     "storage_flow_forecast.csv": {
       "source": "DA_M1",
-      "data_through": "2026-08-31",
-      "built": "2026-08-20 09:54",
+      "data_through": "2026-09-18",
+      "built": "2026-09-07 10:46",
       "published": true
     },
     "spread_signal_log.csv": {
@@ -51,38 +51,38 @@
     "price_history.csv": {
       "source": "DA_M1",
       "published": true,
-      "data_through": "2026-08-18",
-      "built": "2026-08-20 10:07"
+      "data_through": "2026-09-04",
+      "built": "2026-09-07 10:47"
     },
     "spread_spec.json": {
       "source": "DA_M1",
       "published": true,
-      "built": "2026-08-20 10:07"
+      "built": "2026-09-07 10:47"
     }
   },
   "blocked": [],
   "signal": {
     "date": "2026-08-20",
     "issued": "2026-08-20 09:55",
-    "is_today": true
+    "is_today": false
   },
-  "updated": "2026-08-20 10:07:44",
+  "updated": "2026-09-07 10:47:38",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-08-20 10:07"
+      "finished": "2026-09-07 10:47"
     },
     "snd": {
       "status": "ok",
-      "detail": "ok in 0.7 min",
-      "finished": "2026-08-20 09:53"
+      "detail": "skipped (already fresh)",
+      "finished": "2026-09-07 10:45"
     },
     "flow": {
       "status": "ok",
-      "detail": "ok in 1.0 min",
-      "finished": "2026-08-20 09:54"
+      "detail": "ok in 1.8 min",
+      "finished": "2026-09-07 10:46"
     },
     "signal": {
       "status": "ok",
@@ -96,9 +96,9 @@
     },
     "prices": {
       "status": "ok",
-      "detail": "ok in 0.4 min",
-      "finished": "2026-08-20 09:54"
+      "detail": "ok in 0.5 min",
+      "finished": "2026-09-07 10:47"
     }
   },
-  "updated_epoch": 1787213265
+  "updated_epoch": 1788770858
 }
