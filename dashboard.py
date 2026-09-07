@@ -255,9 +255,11 @@ try:
         tri, color, direction = '&#9650;', '#09ab3b', 'LONG spread (long DA / short M1)'
     else:
         tri, color, direction = '&#9660;', '#ff2b2b', 'SHORT spread (short DA / long M1)'
-    s1, s_da, s_m1, s2, s3 = st.columns([1.3, 1, 1, 2, 1.3])
+    s1, s_px, s2, s3 = st.columns([1.3, 1.5, 2, 1.3])
     s1.metric('Issued', str(sig['issued']),
               help=f"trade day {sig['date']:%Y-%m-%d}")
+    # the two entry prices share one column, split tight, so they read as a pair
+    s_da, s_m1 = s_px.columns(2, gap='small')
     s_da.metric('DA vwap', f"{sig['da_am']:.3f}",
                 help='Day Ahead entry price: 09:00-10:00 Amsterdam mid-quote average '
                      'from the desk snapshots (fetch_vwap.py)')
