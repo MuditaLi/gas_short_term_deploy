@@ -2,32 +2,32 @@
   "files": {
     "snd_de.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-09-13",
-      "built": "2026-09-07 10:19",
+      "data_through": "2026-09-14",
+      "built": "2026-09-08 09:25",
       "published": true
     },
     "snd_nl.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-09-13",
-      "built": "2026-09-07 10:19",
+      "data_through": "2026-09-14",
+      "built": "2026-09-08 09:25",
       "published": true
     },
     "snd_uk.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-09-13",
-      "built": "2026-09-07 10:19",
+      "data_through": "2026-09-14",
+      "built": "2026-09-08 09:25",
       "published": true
     },
     "country_balance.csv": {
       "source": "daily_storage_forecast",
-      "data_through": "2026-09-13",
-      "built": "2026-09-07 10:19",
+      "data_through": "2026-09-14",
+      "built": "2026-09-08 09:25",
       "published": true
     },
     "storage_flow_forecast.csv": {
       "source": "DA_M1",
-      "data_through": "2026-09-18",
-      "built": "2026-09-07 10:46",
+      "data_through": "2026-09-19",
+      "built": "2026-09-08 10:03",
       "published": true
     },
     "spread_signal_log.csv": {
@@ -52,20 +52,20 @@
       "source": "DA_M1",
       "published": true,
       "data_through": "2026-09-04",
-      "built": "2026-09-07 17:08"
+      "built": "2026-09-08 10:04"
     },
     "regas_lng_alerts.csv": {
       "source": "daily_storage_forecast",
       "published": true,
-      "data_through": "2026-09-07",
-      "built": "2026-09-07 17:08",
+      "data_through": "2026-09-08",
+      "built": "2026-09-08 10:04",
       "reason": "LNG check did not run (no divergence rows - Kpler unreachable?)"
     },
     "ldz_models.csv": {
       "source": "daily_storage_forecast",
       "published": true,
-      "data_through": "2026-09-13",
-      "built": "2026-09-07 17:08"
+      "data_through": "2026-09-14",
+      "built": "2026-09-08 10:04"
     },
     "am_window_prices.csv": {
       "source": "desk snapshots",
@@ -78,25 +78,25 @@
   "signal": {
     "date": "2026-09-07",
     "issued": "2026-09-07 17:08",
-    "is_today": true
+    "is_today": false
   },
-  "updated": "2026-09-07 17:08:45",
+  "updated": "2026-09-08 10:04:23",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-09-07 17:08"
+      "finished": "2026-09-08 10:04"
     },
     "snd": {
       "status": "ok",
       "detail": "skipped (already fresh)",
-      "finished": "2026-09-07 10:45"
+      "finished": "2026-09-08 10:01"
     },
     "flow": {
       "status": "ok",
       "detail": "ok in 1.8 min",
-      "finished": "2026-09-07 10:46"
+      "finished": "2026-09-08 10:03"
     },
     "signal": {
       "status": "ok",
@@ -110,9 +110,9 @@
     },
     "prices": {
       "status": "ok",
-      "detail": "ok in 0.5 min",
-      "finished": "2026-09-07 10:47"
+      "detail": "ok in 0.6 min",
+      "finished": "2026-09-08 10:04"
     }
   },
-  "updated_epoch": 1788793726
+  "updated_epoch": 1788854663
 }
