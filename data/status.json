@@ -38,8 +38,8 @@
     },
     "spread_signal_backfill.csv": {
       "source": "DA_M1",
-      "data_through": "2026-08-19",
-      "built": "2026-08-20 10:07",
+      "data_through": "2026-09-07",
+      "built": "2026-09-08 10:09",
       "published": true
     },
     "spread_model_params.csv": {
@@ -52,20 +52,20 @@
       "source": "DA_M1",
       "published": true,
       "data_through": "2026-09-04",
-      "built": "2026-09-08 10:08"
+      "built": "2026-09-08 10:09"
     },
     "regas_lng_alerts.csv": {
       "source": "daily_storage_forecast",
       "published": true,
       "data_through": "2026-09-08",
-      "built": "2026-09-08 10:08",
+      "built": "2026-09-08 10:09",
       "reason": "LNG check did not run (no divergence rows - Kpler unreachable?)"
     },
     "ldz_models.csv": {
       "source": "daily_storage_forecast",
       "published": true,
       "data_through": "2026-09-14",
-      "built": "2026-09-08 10:08"
+      "built": "2026-09-08 10:09"
     },
     "am_window_prices.csv": {
       "source": "desk snapshots",
@@ -80,13 +80,13 @@
     "issued": "2026-09-08 10:08",
     "is_today": true
   },
-  "updated": "2026-09-08 10:08:22",
+  "updated": "2026-09-08 10:09:20",
   "host": "eetp-vdi-xd2622",
   "stages": {
     "publish": {
       "status": "ok",
       "detail": "clean",
-      "finished": "2026-09-08 10:08"
+      "finished": "2026-09-08 10:09"
     },
     "snd": {
       "status": "ok",
@@ -104,9 +104,9 @@
       "finished": "2026-09-08 10:08"
     },
     "backfill": {
-      "status": "failed",
-      "detail": "exit 1",
-      "finished": "2026-09-07 11:25"
+      "status": "ok",
+      "detail": "ok",
+      "finished": "2026-09-08 10:09"
     },
     "prices": {
       "status": "ok",
@@ -114,5 +114,5 @@
       "finished": "2026-09-08 10:04"
     }
   },
-  "updated_epoch": 1788854903
+  "updated_epoch": 1788854960
 }
